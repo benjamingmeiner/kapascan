@@ -81,23 +81,30 @@ class Table:
     def __exit__(self, *args):
         self.serial_connection.disconnect()
 
+    def get_status(self):
+        # TODO: make sure idle command is transmitted ($setting)
+        """ """
+        response = self.serial_connection.command("?").strip("<>").split(",")
+        return response[0]
+
     def move(self, x=0, y=0, mode='relative'):
         """
         Moves the table to the desired coordinates.
+        Blocks until finished.
 
         Parameters
         ----------
         x, y : float
-            coordinates to move to
+            The coordinates to move to
 
         mode : string
-            move in relative or absolute coordinates with ``relative`` or
+            Move in relative or absolute coordinates with ``relative`` or
             ``absolute``
         """
         mode = mode.lower()
         if mode not in Table().g_code.keys():
             print("Unrecognized move mode!")
-        # TODO: check response from command
         self.serial_connection.command(self.g_code[mode])
         self.serial_connection.command("X{} Y{}".format(x, y))
-
+        while self.get_status() != "Idle":
+            time.sleep(0.5)

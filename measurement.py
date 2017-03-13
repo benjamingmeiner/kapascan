@@ -8,11 +8,11 @@ class Measurement():
 
     def measure(self):
         with self.controller as controller, self.table as table:
-            table.move(x=-0.5)
-            table.move(x=+0.5)
-            controller.set_sampling_time(1)
-            print(controller.acquire(10))
-
+            controller.set_sampling_time(0)
+            table.move(y=-2)
+            print(controller.acquire(1))
+            table.move(y=+2)
+            print(controller.acquire(1))
 
 m = Measurement()
 m.measure()
