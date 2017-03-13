@@ -35,11 +35,7 @@ import numpy as np
 
 class DeviceError(Exception):
     """Simple exception class used for all erros in this module."""
-    def __init__(self, message):
-        self.message = message
-
-    def __str__(self):
-        return "ERROR: {}".format(self.message)
+    pass
 
 
 class ControlSocket:

@@ -1,6 +1,9 @@
 import time
 import serial
 
+class TableError(Exception):
+    pass
+
 class SerialConnection:
     """
     Interface to the serial port of the Arduino running grbl
