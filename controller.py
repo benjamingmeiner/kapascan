@@ -319,8 +319,8 @@ class Controller:
 
     Parameters
     ----------
-    measuring_range : float
-        The measuring range of the sensor.
+    sensor : class Sensor
+        A Sensor class as defined in sensor.py.
     host : str
         The hosts ip adress
     control_port : int, optional
@@ -334,8 +334,8 @@ class Controller:
       >>> data = controller.acquire(data_points=100, sampling_time=50, channels=[0,1])
 
     """
-    def __init__(self, measuring_range, host, control_port=23, data_port=10001):
-        self.measuring_range = measuring_range
+    def __init__(self, sensor, host, control_port=23, data_port=10001):
+        self.sensor = sensor
         self.control_socket = ControlSocket(host, control_port)
         self.data_socket = DataSocket(host, data_port)
         self.status_response = None
@@ -393,7 +393,7 @@ class Controller:
 
     def scale(self, data):
         """Scale the aquired data to the measuring range of the sensor."""
-        return data / 0xffffff * self.measuring_range
+        return data / 0xffffff * self.sensor.range
 
     def acquire(self, data_points=1, sampling_time=None, channels=(0, 1)):
         """
