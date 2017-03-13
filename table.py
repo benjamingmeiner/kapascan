@@ -44,13 +44,17 @@ class Table:
         self.g_code = {'relative': 'G91',
                        'absolute': 'G90'}
 
-    def move(self, coordinates, mode='relative', **kwargs):
-        if len(coordinates) != 2:
-            print("Error: Please specify two coordinates!")
+    def __enter__(self):
+        self.serial_connection.connect()
+        return self
+
+    def __exit__(self, *args):
+        self.serial_connection.disconnect()
+
+    def move(self, x=0, y=0, mode='relative'):
         mode = mode.lower()
         if mode not in self.g_code.keys():
             print("Unrecognized move mode!")
-        with self.serial_connection as sc:
-            print(sc.command("$X"))
-            print(sc.command(self.g_code[mode]))
-            print(sc.command("X{} Y{}".format(*coordinates)))
+        print(self.serial_connection.command("$X"))
+        print(self.serial_connection.command(self.g_code[mode]))
+        print(self.serial_connection.command("X{} Y{}".format(x, y)))
