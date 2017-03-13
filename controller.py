@@ -62,12 +62,14 @@ class ControlSocket:
     -----
     This class is meant to be used as a context manager to handle the
     connection and disconnection of the socket safely and automatically.
+    Otherwise you have to call the methods ``connect`` and ``disconnect``
+    manually.
 
     Example
     -------
-      >>> cs = ControlSocket('192.168.254.173', 23)
-      >>> with cs:
-      >>>     print(cs.command("VER"))  # prints the software version number
+      >>> with ControlSocket('192.168.254.173', 23) as control_socket:
+      >>>     # prints the software version number
+      >>>     print(control_socket.command("VER"))
     """
     def __init__(self, host, control_port=23, timeout=5):
         self.host = host
@@ -167,9 +169,8 @@ class DataSocket:
 
     Example
     -------
-      >>> data_socket = DataSocket(host)
       >>> try:
-      >>>     with data_socket as data_socket:
+      >>>     with DataSocket(host) as data_socket:
       >>>         data = data_socket.get_data(data_points, channels)
       >>> except DeviceError as error:
       >>>     print(error)
@@ -178,10 +179,12 @@ class DataSocket:
     -----
     This class is meant to be used as a context manager to handle the
     connection and disconnection of the socket safely and automatically.
+    Otherwise you have to call the methods ``connect`` and ``disconnect``
+    manually.
     When ``data_port`` is different from the standard port 10001, it can be
     retrived via the control command "GDP"
-      >>> with ControlSocket(host) as cs:
-      >>>     data_port = cs.command("GDP")
+      >>> with ControlSocket(host) as control_socket:
+      >>>     data_port = control_socket.command("GDP")
 
     Data Representation
     -------------------
@@ -342,6 +345,16 @@ class Controller:
         self.data_socket = DataSocket(host, data_port)
         self.status_response = None
 
+    def __enter__(self):
+        try:
+            self.control_socket.connect()
+        except DeviceError as error:
+            print(error)
+        return self
+
+    def __exit__(self, *args):
+        self.control_socket.disconnect()
+
     def set_sampling_time(self, sampling_time):
         """
         Set the sampling time to the closest possible sampling time of the
@@ -358,8 +371,7 @@ class Controller:
             The actual sampling time.
         """
         try:
-            with self.control_socket as cs:
-                response = cs.command("STI{}".format(int(sampling_time * 1000)))
+            response = self.control_socket.command("STI{}".format(int(sampling_time * 1000)))
         except DeviceError as error:
             print(error)
         else:
@@ -378,10 +390,9 @@ class Controller:
         parameters didn't change.
         """
         try:
-            with self.control_socket as cs:
-                response1 = cs.command("STS")
-                response2 = cs.command("LIN?")
-                status_response = response1 + ";LIN" + response2
+            response1 = self.control_socket.command("STS")
+            response2 = self.control_socket.command("LIN?")
+            status_response = response1 + ";LIN" + response2
         except DeviceError as error:
             print(error)
         else:

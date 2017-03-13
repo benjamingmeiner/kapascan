@@ -27,6 +27,7 @@ class SerialConnection:
     def disconnect(self):
         """ """
         self.serial_connection.close()
+        print("Disconnected from serial port")
 
     def command(self, com):
         """ """
