@@ -39,10 +39,11 @@ class SerialConnection:
 
 
 class Table:
+    g_code = {'relative': 'G91',
+              'absolute': 'G90'}
+
     def __init__(self, port='COM7', baudrate=115200):
         self.serial_connection = SerialConnection(port, baudrate)
-        self.g_code = {'relative': 'G91',
-                       'absolute': 'G90'}
 
     def __enter__(self):
         self.serial_connection.connect()
@@ -55,7 +56,7 @@ class Table:
 
     def move(self, x=0, y=0, mode='relative'):
         mode = mode.lower()
-        if mode not in self.g_code.keys():
+        if mode not in Table().g_code.keys():
             print("Unrecognized move mode!")
         print(self.serial_connection.command(self.g_code[mode]))
         print(self.serial_connection.command("X{} Y{}".format(x, y)))
