@@ -5,13 +5,13 @@ class SerialConnection:
     """
     Interface to the serial port of the Arduino running grbl
     """
-    def _init_(self, port, baudrate, timeout=5):
+    def __init__(self, port, baudrate=115200, timeout=1):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
         self.serial_connection = None
 
-    def _enter__(self):
+    def __enter__(self):
         self.connect()
         return self
 
