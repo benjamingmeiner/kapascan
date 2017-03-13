@@ -111,6 +111,7 @@ class ControlSocket:
     def disconnect(self):
         """Close the connection to the telnet socket."""
         self.control_socket.close()
+        print("Disconnected from control port")
 
     def command(self, com):
         """
@@ -240,6 +241,7 @@ class DataSocket:
     def disconnect(self):
         """Close the connection to the data socket."""
         self.data_socket.close()
+        print("Disconnected from data port")
 
     def inspect_header(self, data_stream):
         """
@@ -425,7 +427,6 @@ class Controller:
         if sampling_time is not None:
             sampling_time = self.set_sampling_time(sampling_time)
         self.check_status()
-        print("Acquiring data ...")
         try:
             with self.data_socket as ds:
                 return self.scale(ds.get_data(data_points, channels))
