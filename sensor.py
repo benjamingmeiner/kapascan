@@ -4,5 +4,5 @@ class Sensor:
 
     def __init__(self, model):
         self.model = model
-        for key, value in Sensor().sensors[model]:
+        for key, value in self.sensors[model].items():
             setattr(self, key, value)

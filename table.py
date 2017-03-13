@@ -20,8 +20,9 @@ class SerialConnection:
 
     def connect(self):
         """ """
+        # TODO catch exceptions here
         self.serial_connection = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
-        print(self.serial_connection.readlines())
+        self.serial_connection.readlines()
         print("Connected to serial port")
 
     def disconnect(self):
@@ -59,5 +60,7 @@ class Table:
         mode = mode.lower()
         if mode not in Table().g_code.keys():
             print("Unrecognized move mode!")
-        print(self.serial_connection.command(self.g_code[mode]))
-        print(self.serial_connection.command("X{} Y{}".format(x, y)))
+        # TODO: check response from command
+        self.serial_connection.command(self.g_code[mode])
+        self.serial_connection.command("X{} Y{}".format(x, y))
+

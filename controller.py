@@ -308,7 +308,7 @@ class DataSocket:
             for i in range(nr_of_frames):
                 if received_data_points < data_points:
                     data[received_data_points] = np.frombuffer(
-                        payload[i*bytes_per_frame:(i+1)*bytes_per_frame], data_type)[channels]
+                        payload[i*bytes_per_frame:(i+1)*bytes_per_frame], data_type)[list(channels)]
                     received_data_points += 1
                 else:
                     break
