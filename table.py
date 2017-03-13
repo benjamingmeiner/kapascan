@@ -42,8 +42,8 @@ class Table:
     g_code = {'relative': 'G91',
               'absolute': 'G90'}
 
-    def __init__(self, port='COM7', baudrate=115200):
-        self.serial_connection = SerialConnection(port, baudrate)
+    def __init__(self, serial_port='COM7', baudrate=115200):
+        self.serial_connection = SerialConnection(serial_port, baudrate)
 
     def __enter__(self):
         self.serial_connection.connect()
