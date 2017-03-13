@@ -27,6 +27,7 @@ import time
 import socket
 import struct
 import telnetlib
+from sensor import Sensor
 import numpy as np
 
 # TODO check all io for exception that can be raised
@@ -334,7 +335,8 @@ class Controller:
       >>> data = controller.acquire(data_points=100, sampling_time=50, channels=[0,1])
 
     """
-    def __init__(self, sensor, host, control_port=23, data_port=10001):
+    def __init__(self, host='192.168.254.173', control_port=23,
+                 data_port=10001, sensor=Sensor('1234')):
         self.sensor = sensor
         self.control_socket = ControlSocket(host, control_port)
         self.data_socket = DataSocket(host, data_port)
