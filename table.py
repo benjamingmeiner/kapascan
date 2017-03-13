@@ -22,19 +22,32 @@ class SerialConnection:
         self.disconnect()
 
     def connect(self):
-        """ """
+        """Open the connection to the serial connection."""
         # TODO catch exceptions here
         self.serial_connection = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
         self.serial_connection.readlines()
         print("Connected to serial port")
 
     def disconnect(self):
-        """ """
+        """Close the connection to the serial connection."""
         self.serial_connection.close()
         print("Disconnected from serial port")
 
     def command(self, com):
-        """ """
+        #TODO: proper return value
+        """
+        Send a command over the serial connection.
+
+        Parameters
+        ----------
+        com : string
+            The command to be sent without trailing newline or carriage return.
+
+        Returns
+        -------
+        response : string
+            sth.
+        """
         self.serial_connection.write(com.encode('ascii') + b"\n")
         response = self.serial_connection.readline().decode('ascii').strip("\r\n")
         if "ok" in response:
@@ -44,6 +57,10 @@ class SerialConnection:
 
 
 class Table:
+    """
+    Interface to the Arduino.
+
+    """
     g_code = {'relative': 'G91',
               'absolute': 'G90'}
 
@@ -60,6 +77,18 @@ class Table:
         self.serial_connection.disconnect()
 
     def move(self, x=0, y=0, mode='relative'):
+        """
+        Moves the table to the desired coordinates.
+
+        Parameters
+        ----------
+        x, y : float
+            coordinates to move to
+
+        mode : string
+            move in relative or absolute coordinates with ``relative`` or
+            ``absolute``
+        """
         mode = mode.lower()
         if mode not in Table().g_code.keys():
             print("Unrecognized move mode!")

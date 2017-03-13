@@ -31,6 +31,7 @@ from sensor import Sensor
 import numpy as np
 
 # TODO check all io for exception that can be raised
+# TODO handle exceptions properly and at the right place; to the user
 # TODO check measurement frame counter
 
 class DeviceError(Exception):
