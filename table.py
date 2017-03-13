@@ -35,6 +35,22 @@ class SerialConnection:
         if "ok" in response:
             return response
         else:
-            return "ERROR: {}".format(response)
+            return "CAUTION: {}".format(response)
 
 
+class Table:
+    def __init__(self, port='COM7', baudrate=115200):
+        self.serial_connection = SerialConnection(port, baudrate)
+        self.g_code = {'relative': 'G91',
+                       'absolute': 'G90'}
+
+    def move(self, coordinates, mode='relative', **kwargs):
+        if len(coordinates) != 2:
+            print("Error: Please specify two coordinates!")
+        mode = mode.lower()
+        if mode not in self.g_code.keys():
+            print("Unrecognized move mode!")
+        with self.serial_connection as sc:
+            print(sc.command("$X"))
+            print(sc.command(self.g_code[mode]))
+            print(sc.command("X{} Y{}".format(*coordinates)))
