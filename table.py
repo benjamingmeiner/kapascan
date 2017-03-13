@@ -46,6 +46,8 @@ class Table:
 
     def __enter__(self):
         self.serial_connection.connect()
+        # TODO remove $X when limit switches work
+        self.serial_connection.command("$X")
         return self
 
     def __exit__(self, *args):
@@ -55,7 +57,5 @@ class Table:
         mode = mode.lower()
         if mode not in self.g_code.keys():
             print("Unrecognized move mode!")
-        # TODO remove $X when limit switches work
-        print(self.serial_connection.command("$X"))
         print(self.serial_connection.command(self.g_code[mode]))
         print(self.serial_connection.command("X{} Y{}".format(x, y)))
