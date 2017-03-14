@@ -1,12 +1,16 @@
 import time
 import serial
 
+"""
+Interface to the Arduino.
+"""
+
 class TableError(Exception):
     pass
 
 class SerialConnection:
     """
-    Interface to the serial port of the Arduino running grbl
+    Interface to the serial port of the Arduino running grbl.
     """
     def __init__(self, port, baudrate=115200, timeout=1):
         self.port = port
@@ -34,7 +38,6 @@ class SerialConnection:
         print("Disconnected from serial port")
 
     def command(self, com):
-        #TODO: proper return value
         """
         Send a command over the serial connection.
 
@@ -64,7 +67,6 @@ class SerialConnection:
 class Table:
     """
     Interface to the Arduino.
-
     """
     g_code = {'relative': 'G91',
               'absolute': 'G90'}
