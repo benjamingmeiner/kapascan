@@ -370,7 +370,8 @@ class Controller:
             The actual sampling time.
         """
         try:
-            response = self.control_socket.command("STI{}".format(int(sampling_time * 1000)))
+            sampling_time = int(sampling_time * 1000)
+            response = self.control_socket.command("STI{}".format(sampling_time))
         except DeviceError as error:
             print(error)
         else:
