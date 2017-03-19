@@ -110,3 +110,16 @@ class Table:
         self.serial_connection.command("X{} Y{}".format(x, y))
         while self.get_status() != "Idle":
             time.sleep(0.5)
+
+    def get_resolution(self):
+        """Get the resolution of each axis in steps/mm."""
+        response = self.serial_connection.command("$$")
+        for r in response:
+            if r.startswith("$100"):
+                var, sep, x_res = r.split("=")
+            if r.startswith("$101"):
+                var, sep, eey_res = r.split("=")
+            if r.startswith("$102"):
+                var, sep, z_res = r.split("=")
+        return x_res, y_res, z_res
+
