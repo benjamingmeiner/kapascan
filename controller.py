@@ -426,7 +426,7 @@ class Controller:
 
     def acquire(self, data_points=1, sampling_time=None, channels=(0, 1)):
         """
-        Start data aquisition. All channels are measured simultaneously.
+        Start continuous data aquisition. All channels are measured simultaneously.
 
         Parameters
         ----------
