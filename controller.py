@@ -379,6 +379,22 @@ class Controller:
             print("Set sampling time: {} ms".format(float(actual_time) / 1000))
             return actual_time
 
+    def set_trigger_mode(mode="continuous"):
+        """
+        Set the trigger mode.
+
+        Parameter
+        ---------
+        mode : str
+            possible options are ``continuous``, ``rising_edge``, ``high_level``
+            and ``gate_rising_edge``. See manual for an explanation of the modes.
+        """
+        trg_nr = {"continuous": 0, "rising_edge": 1, "high_level": 2, "gate_rising_edge": 3}
+        try:
+            response = self.control_socket_.command("TRG{}".format(trg_nr[mode]))
+        except DeviceError as error:
+            print(error)
+
     def check_status(self):
         """
         Check all relevant measurement parameters of the controller.
