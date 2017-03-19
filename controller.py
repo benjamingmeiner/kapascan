@@ -446,3 +446,14 @@ class Controller:
                 return self.scale(ds.get_data(data_points, channels))
         except DeviceError as error:
             print(error)
+
+    @contextmanager
+    # TODO think about how to use these context managers
+    def start(self):
+        try:
+            self.data_socket.connect()
+            yield
+        except DeviceError as error:
+            print(error)
+        finally:
+            self.data_socket.disconnect()
