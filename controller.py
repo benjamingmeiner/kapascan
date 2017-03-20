@@ -35,7 +35,7 @@ import numpy as np
 # TODO check measurement frame counter
 
 class DeviceError(Exception):
-    """Simple exception class used for all erros in this module."""
+    """Simple exception class used for all errors in this module."""
     pass
 
 
@@ -49,7 +49,7 @@ class ControlSocket:
     Parameters
     ----------
     host : string
-        The hosts ip adress.
+        The hosts ip address.
     control_port : int, optional
         The telnet port of the controller.
     timeout : int, optional
@@ -117,7 +117,7 @@ class ControlSocket:
         Parameters
         ----------
         com : string
-            The command to be sent to the conroller without the preceding '$'.
+            The command to be sent to the controller without the preceding '$'.
 
         Returns
         -------
@@ -159,7 +159,7 @@ class DataSocket:
     Parameters
     ----------
     host : string
-        The hosts ip adress.
+        The hosts ip address.
     data_port : int, optional
         The data port of the controller.
     timeout : int, optional
@@ -180,7 +180,7 @@ class DataSocket:
     Otherwise you have to call the methods ``connect`` and ``disconnect``
     manually.
     When ``data_port`` is different from the standard port 10001, it can be
-    retrived via the control command "GDP"
+    retrieved via the control command "GDP"
       >>> with ControlSocket(host) as control_socket:
       >>>     data_port = control_socket.command("GDP")
 
@@ -264,7 +264,7 @@ class DataSocket:
 
     def get_data(self, data_points=1, channels=(0, 1)):
         """
-        Get measurement data from the conroller.
+        Get measurement data from the controller.
 
         Parameters
         ----------
@@ -325,7 +325,7 @@ class Controller:
     sensor : class Sensor
         A Sensor class as defined in sensor.py.
     host : str
-        The hosts ip adress
+        The hosts IP address
     control_port : int, optional
         The telnet port of the controller.
     data_port : int, optional
@@ -383,15 +383,15 @@ class Controller:
         """
         Set the trigger mode.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         mode : str
             possible options are ``continuous``, ``rising_edge``, ``high_level``
             and ``gate_rising_edge``. See manual for an explanation of the modes.
         """
         trg_nr = {"continuous": 0, "rising_edge": 1, "high_level": 2, "gate_rising_edge": 3}
         try:
-            response = self.control_socket_.command("TRG{}".format(trg_nr[mode]))
+            response = self.control_socket.command("TRG{}".format(trg_nr[mode]))
         except DeviceError as error:
             print(error)
 
@@ -399,9 +399,9 @@ class Controller:
         """
         Check all relevant measurement parameters of the controller.
 
-        This methods copmares the status to the last status that is saved as an
-        attribute. It prints out a warning if the status changed inbetween to
-        calls. It is therfore recommended to use this function before every
+        This methods compares the status to the last status that is saved as an
+        attribute. It prints out a warning if the status changed in between to
+        calls. It is therefore recommended to use this function before every
         call to ``DataSocket.get_data`` to assure that the measurement
         parameters didn't change.
         """
@@ -421,7 +421,7 @@ class Controller:
             self.status_response = status_response
 
     def scale(self, data):
-        """Scale the aquired data to the measuring range of the sensor."""
+        """Scale the acquired data to the measuring range of the sensor."""
         return data / 0xffffff * self.sensor.range
 
     def acquire(self, data_points=1, sampling_time=None, channels=(0, 1)):
