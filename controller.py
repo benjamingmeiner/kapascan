@@ -424,9 +424,13 @@ class Controller:
         """Scale the aquired data to the measuring range of the sensor."""
         return data / 0xffffff * self.sensor.range
 
-    def acquire(self, data_points=1, sampling_time=None, channels=(0, 1)):
+    def trigger(self):
+        """ Trigger a single measurement."""
+        self.controll_socket.command("GMD")
+
+    def get_data(self, data_points=1, channels=[0]):
         """
-        Start continuous data aquisition. All channels are measured simultaneously.
+        Get data from controller. All channels are measured simultaneously.
 
         Parameters
         ----------
@@ -438,22 +442,18 @@ class Controller:
         channels : array_like, optional
             A tuple of the channels to get the data from.
         """
-        if sampling_time is not None:
-            sampling_time = self.set_sampling_time(sampling_time)
-        self.check_status()
-        try:
-            with self.data_socket as ds:
-                return self.scale(ds.get_data(data_points, channels))
-        except DeviceError as error:
-            print(error)
+        return self.scale(self.data_socket.get_data(data_points, channels))
 
     @contextmanager
-    # TODO think about how to use these context managers
-    def start(self):
+    def acquisition(self, mode="rising_edge", sampling_time=0):
         try:
+            self.set_sampling_time(sampling_time)
+            self.set_trigger_mode(mode)
+            self.check_status()
             self.data_socket.connect()
             yield
         except DeviceError as error:
             print(error)
         finally:
             self.data_socket.disconnect()
+
