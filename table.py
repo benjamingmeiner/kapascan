@@ -18,13 +18,6 @@ class SerialConnection:
         self.timeout = timeout
         self.serial_connection = None
 
-    def __enter__(self):
-        self.connect()
-        return self
-
-    def __exit__(self, *args):
-        self.disconnect()
-
     def connect(self):
         """Open the connection to the serial connection."""
         # TODO catch exceptions here
@@ -74,16 +67,16 @@ class Table:
     def __init__(self, serial_port='COM7', baudrate=115200):
         self.serial_connection = SerialConnection(serial_port, baudrate)
 
-    def __enter__(self):
+    def connect():
         self.serial_connection.connect()
         # TODO remove $X when limit switches work
         self.serial_connection.command("$X")
-        return self
 
-    def __exit__(self, *args):
+    def disconnect():
         self.serial_connection.disconnect()
 
     def get_status(self):
+        # TODO check new grbl v1.1 syntax
         # TODO: make sure idle command is transmitted ($setting)
         """ """
         response = self.serial_connection.command("?").strip("<>").split(",")

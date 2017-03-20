@@ -30,9 +30,11 @@ import telnetlib
 from sensor import Sensor
 import numpy as np
 
-# TODO check all io for exception that can be raised
+# TODO check all IO for exceptions that can be raised
 # TODO handle exceptions properly and at the right place; to the user
 # TODO check measurement frame counter
+# TODO use proper sensor class
+# TODO use proper default values of function arguments
 
 class DeviceError(Exception):
     """Simple exception class used for all errors in this module."""
@@ -73,13 +75,6 @@ class ControlSocket:
         self.control_port = control_port
         self.timeout = timeout
         self.control_socket = None
-
-    def __enter__(self):
-        self.connect()
-        return self
-
-    def __exit__(self, *args):
-        self.disconnect()
 
     def connect(self):
         """
@@ -210,13 +205,6 @@ class DataSocket:
         self.timeout = timeout
         self.data_socket = None
 
-    def __enter__(self):
-        self.connect()
-        return self
-
-    def __exit__(self, *args):
-        self.disconnect()
-
     def connect(self):
         """
         Open a new data socket connection to it.
@@ -344,14 +332,10 @@ class Controller:
         self.data_socket = DataSocket(host, data_port)
         self.status_response = None
 
-    def __enter__(self):
-        try:
-            self.control_socket.connect()
-        except DeviceError as error:
-            print(error)
-        return self
+    def connect(self):
+        self.control_socket.connect()
 
-    def __exit__(self, *args):
+    def disconnect(self):
         self.control_socket.disconnect()
 
     def set_sampling_time(self, sampling_time):
@@ -420,15 +404,11 @@ class Controller:
                         print("WARNING: Changed parameter: {} to {}.".format(old, new))
             self.status_response = status_response
 
-    def scale(self, data):
-        """Scale the acquired data to the measuring range of the sensor."""
-        return data / 0xffffff * self.sensor.range
-
     def trigger(self):
         """ Trigger a single measurement."""
         self.controll_socket.command("GMD")
 
-    def get_data(self, data_points=1, channels=[0]):
+    def get_data(self, data_points=1, channels=(0, 1)):
         """
         Get data from controller. All channels are measured simultaneously.
 
@@ -444,12 +424,15 @@ class Controller:
         """
         return self.scale(self.data_socket.get_data(data_points, channels))
 
+    def scale(self, data):
+        """Scale the acquired data to the measuring range of the sensor."""
+        return data / 0xffffff * self.sensor.range
+
     @contextmanager
     def acquisition(self, mode="rising_edge", sampling_time=0):
         try:
             self.set_sampling_time(sampling_time)
             self.set_trigger_mode(mode)
-            self.check_status()
             self.data_socket.connect()
             yield
         except DeviceError as error:
