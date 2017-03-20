@@ -154,7 +154,7 @@ class DataSocket:
     Parameters
     ----------
     host : string
-        The hosts ip address.
+        The hosts IP address.
     data_port : int, optional
         The data port of the controller.
     timeout : int, optional
@@ -263,7 +263,7 @@ class DataSocket:
 
         Returns
         -------
-        A n x m array with n = number of channels and m = number of data points.
+        A n x m array where n = number of channels and m = number of data points.
 
         Raises
         ------
@@ -383,11 +383,9 @@ class Controller:
         """
         Check all relevant measurement parameters of the controller.
 
-        This methods compares the status to the last status that is saved as an
-        attribute. It prints out a warning if the status changed in between to
-        calls. It is therefore recommended to use this function before every
-        call to ``DataSocket.get_data`` to assure that the measurement
-        parameters didn't change.
+        This methods queries the status of the controller and compares it to the 
+        previous status that was saved as an attribute. It prints out a warning
+        if the status changed between to subsequent calls. 
         """
         try:
             response1 = self.control_socket.command("STS")
