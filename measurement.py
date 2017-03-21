@@ -17,26 +17,20 @@ class Measurement():
         self.table.disconnect()
         self.controller.disconnect()
 
-    def measure(self, x, y):
-        res_x, res_y = self.table.get_resolution()[0:2]
-        step_x = 100. / res_x
-        step_y = 100. / res_y
-        print(step_x)
-        print(step_y)
-        x_steps = int(x * res_x / 100)
-        y_steps = int(y * res_y / 100)
+    def measure(self, x_range, y_range, stepsize):
+        #res_x, res_y = self.table.get_resolution()[0:2]
+        x_steps = int(x_range / stepsize)
+        y_steps = int(y_range / stepsize)
         with self.controller.acquisition():
-            for i in range(y_steps):
+            for i in range(y_steps+1):
                 for j in range(x_steps):
-                    print(j)
-                    #self.controller.trigger()
-                    #data = self.controller.get_data()
-                    #print(data)
-                    #time.sleep(0.1)
-                    self.table.move(x=step_x)
-                step_x *= -1
-                self.table.move(y=step_y)
+                    self.controller.trigger()
+                    data = self.controller.get_data(channels=(0,))
+                    print(data)
+                    self.table.move(x=stepsize)
+                stepsize *= -1
+                self.table.move(y=stepsize)
 
 
 with Measurement() as m:
-    m.measure(2, 2)
+    m.measure(3, 0.5, 0.5)
