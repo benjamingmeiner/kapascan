@@ -49,7 +49,6 @@ class SerialConnection:
         response = []
         while True:
             res = self.serial_connection.readline().decode('ascii').strip("\r\n")
-            print(res)
             if not res or "ok" in res:
                 break
             else:
@@ -78,10 +77,8 @@ class Table:
         self.serial_connection.disconnect()
 
     def get_status(self):
-        # TODO check new grbl v1.1 syntax
-        # TODO: make sure idle command is transmitted ($setting)
         """ """
-        response = self.serial_connection.command("?").strip("<>").split(",")
+        response = self.serial_connection.command("?")[0].strip("<>").split("|")
         return response[0]
 
     def move(self, x=0, y=0, mode='relative'):
@@ -103,8 +100,8 @@ class Table:
             print("Unrecognized move mode!")
         self.serial_connection.command(self.g_code[mode])
         self.serial_connection.command("X{} Y{}".format(x, y))
-        while self.get_status() != "Idle":
-            time.sleep(0.5)
+        while self.get_status().lower() != "idle":
+            time.sleep(0.2)
 
     def get_resolution(self):
         """Get the resolution of each axis in steps/mm."""
