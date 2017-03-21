@@ -32,7 +32,7 @@ class SerialConnection:
 
     def command(self, com):
         """
-        Send a command over the serial connection.
+        Send a command over the serial connection and returns the response of the device.
 
         Parameters
         ----------
@@ -41,21 +41,20 @@ class SerialConnection:
 
         Returns
         -------
-        response : string
-            sth.
+        response : list
+            list of each line responded from the device.
         """
+        # TODO handle other response messages than "ok"
         self.serial_connection.write(com.encode('ascii') + b"\n")
-        response = self.serial_connection.readlines()
-        response = [r.decode('ascii').strip("\r\n") for r in response]
-        if "ok" in response[-1]:
-            if len(response) == 2:
-                return response[0]
+        response = []
+        while True:
+            res = self.serial_connection.readline().decode('ascii').strip("\r\n")
+            print(res)
+            if not res or "ok" in res:
+                break
             else:
-                return response[0:-1]
-        else:
-            raise TableError(response)
-            #return "CAUTION: {}".format(response)
-
+                response.append(res)
+        return response
 
 class Table:
     """
