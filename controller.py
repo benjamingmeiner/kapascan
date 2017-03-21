@@ -34,6 +34,7 @@ import struct
 import telnetlib
 from sensor import Sensor
 import numpy as np
+from contextlib import contextmanager
 
 # TODO check all IO for exceptions that can be raised
 # TODO handle exceptions properly and at the right place; to the user
@@ -382,7 +383,7 @@ class Controller:
             print("Set sampling time: {} ms".format(float(actual_time) / 1000))
             return actual_time
 
-    def set_trigger_mode(mode="continuous"):
+    def set_trigger_mode(self, mode="continuous"):
         """
         Set the trigger mode.
 
@@ -423,7 +424,7 @@ class Controller:
 
     def trigger(self):
         """ Trigger a single measurement."""
-        self.controll_socket.command("GMD")
+        self.control_socket.command("GMD")
 
     def get_data(self, data_points=1, channels=(0, 1)):
         """

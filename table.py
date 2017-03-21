@@ -12,7 +12,7 @@ class SerialConnection:
     """
     Interface to the serial port of the Arduino running grbl.
     """
-    def __init__(self, port, baudrate=115200, timeout=1):
+    def __init__(self, port, baudrate=115200, timeout=0.5):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
@@ -64,15 +64,18 @@ class Table:
     g_code = {'relative': 'G91',
               'absolute': 'G90'}
 
-    def __init__(self, serial_port='COM7', baudrate=115200):
+    def __init__(self, serial_port='COM3', baudrate=115200):
         self.serial_connection = SerialConnection(serial_port, baudrate)
 
-    def connect():
+    def connect(self):
         self.serial_connection.connect()
+        time.sleep(1)
+        self.serial_connection.serial_connection.readlines()
         # TODO remove $X when limit switches work
         self.serial_connection.command("$X")
+        self.serial_connection.command("G91")
 
-    def disconnect():
+    def disconnect(self):
         self.serial_connection.disconnect()
 
     def get_status(self):
@@ -109,10 +112,10 @@ class Table:
         response = self.serial_connection.command("$$")
         for r in response:
             if r.startswith("$100"):
-                var, sep, x_res = r.split("=")
+                var, x_res = r.split("=")
             if r.startswith("$101"):
-                var, sep, eey_res = r.split("=")
+                var, y_res = r.split("=")
             if r.startswith("$102"):
-                var, sep, z_res = r.split("=")
-        return x_res, y_res, z_res
+                var, z_res = r.split("=")
+        return float(x_res), float(y_res), float(z_res)
 
