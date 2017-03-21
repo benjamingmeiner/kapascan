@@ -6,11 +6,15 @@ class Measurement():
     def __init__(self):
         self.controller = controller.Controller()
         self.table = table.Table()
+        self.went_home = False
 
     def __enter__(self):
         self.controller.connect()
         self.table.connect()
         self.controller.check_status()
+        if not self.went_home:
+            self.table.home()
+            self.went_home = True
         return self
 
     def __exit__(self, *args):

@@ -81,6 +81,9 @@ class Table:
         response = self.serial_connection.command("?")[0].strip("<>").split("|")
         return response[0]
 
+    def home(self):
+        self.serial_connection.command("$H")
+
     def move(self, x=0, y=0, mode='relative'):
         """
         Moves the table to the desired coordinates.
