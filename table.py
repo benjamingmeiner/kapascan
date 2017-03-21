@@ -4,7 +4,7 @@ import serial
 """
 Interface to the Arduino.
 """
-
+# TODO make non-context-manager interface
 class TableError(Exception):
     pass
 

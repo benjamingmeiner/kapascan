@@ -14,15 +14,20 @@ Controller :
 Notes
 -----
 Data acquisition and control of various parameters of the controller is
-performed via the class methods of ``Device``. The classes ``ControlSocket``
-and ``DataSocket`` are auxiliary classes and not meant to be used directly.
+performed via the class methods of ``Controller``. The classes ``ControlSocket``
+and ``DataSocket`` provide the low-level access to the control and data port of the
+device. All end-user functionality of the interface is implemented in class
+``Controller``, though.
 
 Example
 -------
   >>> controller = Controller('192.168.254.173')
-  >>> data = controller.acquire(data_points=100, sampling_time=50, channels=[0,1])
-
+  >>> controller.connect()
+  >>> with controller.acquisition(mode="continuous", sampling_time=50):
+  >>>    controller.get_data(data_points=100, channels=(0,1))
+  >>> controller.disconnect()
 """
+
 import time
 import socket
 import struct
@@ -57,18 +62,13 @@ class ControlSocket:
     timeout : int, optional
         The time in seconds the socket stops to tries to connect.
 
-    Notes
-    -----
-    This class is meant to be used as a context manager to handle the
-    connection and disconnection of the socket safely and automatically.
-    Otherwise you have to call the methods ``connect`` and ``disconnect``
-    manually.
-
     Example
     -------
-      >>> with ControlSocket('192.168.254.173', 23) as control_socket:
-      >>>     # prints the software version number
-      >>>     print(control_socket.command("VER"))
+      >>> control_socket =  ControlSocket('192.168.254.173')
+      >>> control_socket.connect()
+      >>> # prints the software version number
+      >>> print(control_socket.command("VER"))
+      >>> control_socket.disconnect()
     """
     def __init__(self, host, control_port=23, timeout=5):
         self.host = host
@@ -162,25 +162,36 @@ class DataSocket:
 
     Example
     -------
-      >>> try:
-      >>>     with DataSocket(host) as data_socket:
-      >>>         data = data_socket.get_data(data_points, channels)
-      >>> except DeviceError as error:
-      >>>     print(error)
+      >>> data_socket = DataSocket(host)
+      >>> data_socket.connect()
+      >>> data = data_socket.get_data(data_points, channels)
+      >>> data_socket.disconnect()
 
     Notes
     -----
-    This class is meant to be used as a context manager to handle the
-    connection and disconnection of the socket safely and automatically.
-    Otherwise you have to call the methods ``connect`` and ``disconnect``
-    manually.
+    As soon as the data socket is established (via method ``connect``) data
+    acquisition is started. Available data is transmitted immediatelye. If
+    the controoler is set to trigger mode "continuous", data will be available
+    with the sampling frequency. If the controller is set to one of the other
+    trigger modes, data will be available not until a signal is present at the
+    trigger input, or the command "GDM" is sent over the control port.
+    
+    The transmitted data is stored in a socket buffer which is handled by the 
+    operating system. You can fetch this buffered data via method ``get_data``.
+    If you don't fetch the buffered data, the buffer may overflow and further
+    data acquisition is interrupted.
+
     When ``data_port`` is different from the standard port 10001, it can be
     retrieved via the control command "GDP"
-      >>> with ControlSocket(host) as control_socket:
-      >>>     data_port = control_socket.command("GDP")
+      >>> control_socket = ControlSocket(host) 
+      >>> control_socket.connect()
+      >>> data_port = control_socket.command("GDP")
+      >>> control_socket.disconnect()
 
     Data Representation
     -------------------
+    The controller sends data packages with the following structure:
+
     ================ ============ =============================================
     part             size (bytes) encoding
     ================ ============ =============================================
@@ -207,7 +218,8 @@ class DataSocket:
 
     def connect(self):
         """
-        Open a new data socket connection to it.
+        Open a new data socket. Data acquisition starts as soon as the socket is
+        connected.
 
         Raises
         ------
@@ -322,8 +334,10 @@ class Controller:
     Example
     -------
       >>> controller = Controller('192.168.254.173')
-      >>> data = controller.acquire(data_points=100, sampling_time=50, channels=[0,1])
-
+      >>> controller.connect()
+      >>> with controller.acquisition(mode="continuous", sampling_time=50):
+      >>>    controller.get_data(data_points=100, channels=(0,1))
+      >>> controller.disconnect()
     """
     def __init__(self, host='192.168.254.173', control_port=23,
                  data_port=10001, sensor=Sensor('1234')):
@@ -333,9 +347,14 @@ class Controller:
         self.status_response = None
 
     def connect(self):
+        """
+        Connect to the control socket of the controller. The data socket
+        is not connected until the actual measurement.
+        """
         self.control_socket.connect()
 
     def disconnect(self):
+        """Disconnect from the control socket of the controller."""
         self.control_socket.disconnect()
 
     def set_sampling_time(self, sampling_time):

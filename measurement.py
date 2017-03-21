@@ -22,7 +22,7 @@ class Measurement():
         step_y = 1. / res_y
         x_steps = x * res_x
         y_steps = y * res_y
-        with self.controller.acquisition:
+        with self.controller.acquisition():
             for i in range(y_steps):
                 for j in range(x_steps):
                     self.controller.trigger()
