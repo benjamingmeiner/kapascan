@@ -4,7 +4,6 @@ import serial
 """
 Interface to the Arduino.
 """
-# TODO make non-context-manager interface
 class TableError(Exception):
     pass
 
@@ -12,17 +11,23 @@ class SerialConnection:
     """
     Interface to the serial port of the Arduino running grbl.
     """
-    def __init__(self, port, baudrate=115200, timeout=0.5):
-        self.port = port
-        self.baudrate = baudrate
-        self.timeout = timeout
-        self.serial_connection = None
+    def __init__(self, port, baudrate=115200, timeout=1):
+        self.serial_connection = serial.Serial(None, baudrate, timeout=timeout)
+        self.serial_connection.port = port
+        #self.port = port
+        #self.baudrate = baudrate
+        #self.timeout = timeout
 
+    # TODO check why grbl resets after new connection?
+    # Maybe file bug report on GitHub?
     def connect(self):
         """Open the connection to the serial connection."""
         # TODO catch exceptions here
-        self.serial_connection = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
-        self.serial_connection.readlines()
+        self.serial_connection.open()
+        self.serial_connection.write(b"\n\n")
+        time.sleep(2)
+        wm = self.serial_connection.readlines()
+        print(wm)
         print("Connected to serial port")
 
     def disconnect(self):
@@ -49,7 +54,7 @@ class SerialConnection:
         response = []
         while True:
             res = self.serial_connection.readline().decode('ascii').strip("\r\n")
-            if not res or "ok" in res:
+            if "ok" in res or "error" in res:
                 break
             else:
                 response.append(res)
@@ -67,11 +72,6 @@ class Table:
 
     def connect(self):
         self.serial_connection.connect()
-        time.sleep(1)
-        self.serial_connection.serial_connection.readlines()
-        # TODO remove $X when limit switches work
-        self.serial_connection.command("$X")
-        self.serial_connection.command("G91")
 
     def disconnect(self):
         self.serial_connection.disconnect()
@@ -79,6 +79,7 @@ class Table:
     def get_status(self):
         """ """
         response = self.serial_connection.command("?")[0].strip("<>").split("|")
+        print(response)
         return response[0]
 
     def home(self):
@@ -101,8 +102,7 @@ class Table:
         mode = mode.lower()
         if mode not in Table().g_code.keys():
             print("Unrecognized move mode!")
-        self.serial_connection.command(self.g_code[mode])
-        self.serial_connection.command("X{} Y{}".format(x, y))
+        self.serial_connection.command("{} X{} Y{}".format(self.g_code[mode], x, y))
         while self.get_status().lower() != "idle":
             time.sleep(0.2)
 
