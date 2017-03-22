@@ -25,7 +25,7 @@ class Measurement():
         #res_x, res_y = self.table.get_resolution()[0:2]
         x_steps = int(x_range / stepsize)
         y_steps = int(y_range / stepsize)
-        self.table.move(x=-2, y=-2, mode='absolute')
+        self.table.move(x=10, y=10, mode='absolute')
         with self.controller.acquisition():
             for i in range(y_steps+1):
                 for j in range(x_steps):
@@ -38,4 +38,4 @@ class Measurement():
 
 m =  Measurement()
 with m:
-    m.measure(0.05, 0.005, 0.005)
+    m.measure(10, 0.0005, 0.1)
