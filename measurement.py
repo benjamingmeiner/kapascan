@@ -38,4 +38,4 @@ class Measurement():
 
 m =  Measurement()
 with m:
-    m.measure(10, 0.0005, 0.1)
+    m.measure(1, 0.0005, 0.1)

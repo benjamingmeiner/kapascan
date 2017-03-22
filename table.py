@@ -4,35 +4,34 @@ import serial
 """
 Interface to the Arduino.
 """
+
+# TODO push message checking, alarm usw...
+
 class TableError(Exception):
     pass
 
 class SerialConnection:
     """
-    Interface to the serial port of the Arduino running grbl.
+    Interface to the serial port of the Arduino UNO running grbl.
     """
     def __init__(self, port, baudrate=115200, timeout=1):
-        self.serial_connection = serial.Serial(None, baudrate, timeout=timeout)
+        self.serial_connection = serial.Serial()
         self.serial_connection.port = port
+        self.serial_connection.baudrate = baudrate
+        self.serial_connection.timeout = timeout
         self.serial_connection.dtr = None
-        #self.port = port
-        #self.baudrate = baudrate
-        #self.timeout = timeout
 
-    # TODO check why grbl resets after new connection?
-    # Maybe file bug report on GitHub?
     def connect(self):
-        """Open the connection to the serial connection."""
+        """Open the serial connection."""
         # TODO catch exceptions here
         self.serial_connection.open()
         self.serial_connection.write(b"\n\n")
         time.sleep(2)
-        wm = self.serial_connection.readlines()
-        print(wm)
+        self.serial_connection.readlines()
         print("Connected to serial port")
 
     def disconnect(self):
-        """Close the connection to the serial connection."""
+        """Close the serial connection."""
         self.serial_connection.close()
         print("Disconnected from serial port")
 
@@ -50,7 +49,7 @@ class SerialConnection:
         response : list
             list of each line responded from the device.
         """
-        # TODO handle other response messages than "ok"
+        # TODO handle other response messages than "ok and error"
         self.serial_connection.write(com.encode('ascii') + b"\n")
         response = []
         while True:
