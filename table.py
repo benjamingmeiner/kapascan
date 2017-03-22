@@ -14,6 +14,7 @@ class SerialConnection:
     def __init__(self, port, baudrate=115200, timeout=1):
         self.serial_connection = serial.Serial(None, baudrate, timeout=timeout)
         self.serial_connection.port = port
+        self.serial_connection.dtr = None
         #self.port = port
         #self.baudrate = baudrate
         #self.timeout = timeout
@@ -79,7 +80,6 @@ class Table:
     def get_status(self):
         """ """
         response = self.serial_connection.command("?")[0].strip("<>").split("|")
-        print(response)
         return response[0]
 
     def home(self):
