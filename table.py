@@ -78,6 +78,7 @@ class Table:
 
     def get_status(self):
         """ """
+        # TODO include position in output and return
         response = self.serial_connection.command("?")[0].strip("<>").split("|")
         return response[0]
 
@@ -102,6 +103,7 @@ class Table:
         if mode not in Table().g_code.keys():
             print("Unrecognized move mode!")
         self.serial_connection.command("{} X{} Y{}".format(self.g_code[mode], x, y))
+        # TODO return position after movement
         while self.get_status().lower() != "idle":
             time.sleep(0.2)
 
