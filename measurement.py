@@ -1,7 +1,9 @@
 import controller
 import table
 import time
+
 import math
+import numpy as np
 
 class Measurement():
     def __init__(self):
@@ -26,25 +28,28 @@ class Measurement():
         res_x, res_y = self.table.get_resolution()[0:2]
         steps_x = math.ceil(x_range / stepsize)
         steps_y = math.ceil(y_range / stepsize)
-        if stepsize % res_x != 0 or stepsize % res_y != 0:
-            print("WARNING: Measurement step size is not a multiple
-                    of stepper motor step size!")
-        data = np.zeros((steps_y, steps_x))
-        self.table.move(x=x0 y=y0, mode='absolute')
+        x = np.zeros(steps_x * steps_y)
+        y = np.zeros(steps_x * steps_y)
+        z = np.zeros(steps_x * steps_y)
+        n = 0
+        x[n], y[n] = self.table.move(x=x0, y=y0, mode='absolute')[0:2]
         with self.controller.acquisition():
             for i in range(steps_y):
                 for j in range(steps_x):
-                    self.controller.trigger()
-                    data[i, j] = self.controller.get_data(channels=[0])
+                    self.controller.trigger()                       
                     if i % 2 == 0:
-                        self.table.move(x=stepsize)
-                        # TODO use return value of move function and store result as coordinate positions.
+                        step = stepsize
                     else:
-                        self.table.move(x=-stepsize)
+                        step = -stepsize
+                    z[n] = self.controller.get_data(channels=[0])
+                    if j != steps_x - 1:
+                        x[n+1], y[n+1] = self.table.move(x=step)[0:2]
+                        n += 1
                 if i != steps_y - 1:
-                    self.table.move(y=stepsize)
-        return data
+                    x[n+1], y[n+1] = self.table.move(y=stepsize)[0:2]
+                    n += 1
+        return x, y, z
 
 m =  Measurement()
 with m:
-    data = m.measure(1, 0.0005, 0.1)
+    x, y, z = m.measure(2, 2, 0.7)
