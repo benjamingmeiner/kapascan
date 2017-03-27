@@ -39,8 +39,3 @@ class Measurement():
                 self.controller.trigger()
                 z[i] = self.controller.get_data(channels=[0])
         return x, y, z
-
-
-m =  Measurement()
-with m:
-    x, y, z = m.measure(0, 0, 10, 0.1, 0.1)
