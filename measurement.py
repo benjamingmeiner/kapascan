@@ -35,6 +35,9 @@ class Measurement():
         with self.controller.acquisition():
             for i, (xi, yi) in enumerate(positions):
                 self.table.move(x=xi, y=yi, mode='absolute')
+                # TODO measure longer to build mean
                 self.controller.trigger()
                 z[i] = self.controller.get_data(channels=[0])
         return x_range, y_range, np.transpose(z.reshape((len(x_range), len(y_range))))
+
+m = Measurement()
