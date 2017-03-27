@@ -109,8 +109,8 @@ class Table:
             status, position = self.get_status()
             if status.lower() == "idle":
                 break
-            else:
-                time.sleep(0.2)
+            #else:
+            #    time.sleep(0.1)
         return position
 
     def get_resolution(self):
