@@ -32,12 +32,9 @@ class Measurement():
         y_range = np.arange(y_start, y_stop, stepsize, dtype=np.float)
         positions = list(itertools.product(x_range, y_range))
         z = np.zeros(len(positions))
-        with self.controller.acquisition():
-            for i, (xi, yi) in enumerate(positions):
-                self.table.move(x=xi, y=yi, mode='absolute')
-                # TODO measure longer to build mean
-                self.controller.trigger()
-                z[i] = self.controller.get_data(channels=[0])
+        for i, (xi, yi) in enumerate(positions):
+            self.table.move(x=xi, y=yi, mode='absolute')
+            with self.controller.acquisition(mode='continuous'):
+                data = self.controller.get_data(200, channels=[0])
+                z[i] = data.mean()
         return x_range, y_range, np.transpose(z.reshape((len(x_range), len(y_range))))
-
-m = Measurement()
