@@ -31,11 +31,10 @@ class Measurement():
         x_range = np.arange(x_start, x_stop, stepsize, dtype=np.float)
         y_range = np.arange(y_start, y_stop, stepsize, dtype=np.float)
         positions = list(itertools.product(x_range, y_range))
-        x, y = zip(*positions)
-        z = np.zeros_like(x)
+        z = np.zeros(len(positions))
         with self.controller.acquisition():
             for i, (xi, yi) in enumerate(positions):
                 self.table.move(x=xi, y=yi, mode='absolute')
                 self.controller.trigger()
                 z[i] = self.controller.get_data(channels=[0])
-        return x, y, z
+        return x_range, y_range, np.transpose(z.reshape((len(x_range), len(y_range))))
