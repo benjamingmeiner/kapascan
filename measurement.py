@@ -1,8 +1,7 @@
 import controller
 import table
-import time
 
-import math
+import itertools
 import numpy as np
 
 class Measurement():
@@ -24,32 +23,24 @@ class Measurement():
         self.table.disconnect()
         self.controller.disconnect()
 
-    def measure(self, x_range, y_range, stepsize, x0=0, y0=0):
-        res_x, res_y = self.table.get_resolution()[0:2]
-        steps_x = math.ceil(x_range / stepsize)
-        steps_y = math.ceil(y_range / stepsize)
-        x = np.zeros(steps_x * steps_y)
-        y = np.zeros(steps_x * steps_y)
-        z = np.zeros(steps_x * steps_y)
-        n = 0
-        x[n], y[n] = self.table.move(x=x0, y=y0, mode='absolute')[0:2]
+    def measure(self, x_start, y_start, x_stop, y_stop, stepsize):
+        x_res, y_res = self.table.get_resolution()[0:2]
+        if not (x_res * stepsize).is_integer() or not (y_res * stepsize).is_integer():
+            print("WARNING: Measurement step size is not a multiple of motor step size!" +
+                  "Stepper resolution is [steps/mm]  X: {}  Y: {}".format(x_res, y_res))
+        x_range = np.arange(x_start, x_stop, stepsize, dtype=np.float)
+        y_range = np.arange(y_start, y_stop, stepsize, dtype=np.float)
+        positions = list(itertools.product(x_range, y_range))
+        x, y = zip(*positions)
+        z = np.zeros_like(x)
         with self.controller.acquisition():
-            for i in range(steps_y):
-                for j in range(steps_x):
-                    self.controller.trigger()                       
-                    if i % 2 == 0:
-                        step = stepsize
-                    else:
-                        step = -stepsize
-                    z[n] = self.controller.get_data(channels=[0])
-                    if j != steps_x - 1:
-                        x[n+1], y[n+1] = self.table.move(x=step)[0:2]
-                        n += 1
-                if i != steps_y - 1:
-                    x[n+1], y[n+1] = self.table.move(y=stepsize)[0:2]
-                    n += 1
+            for i, (xi, yi) in enumerate(positions):
+                self.table.move(x=xi, y=yi, mode='absolute')
+                self.controller.trigger()
+                z[i] = self.controller.get_data(channels=[0])
         return x, y, z
+
 
 m =  Measurement()
 with m:
-    x, y, z = m.measure(2, 2, 0.7)
+    x, y, z = m.measure(0, 0, 10, 0.1, 0.1)

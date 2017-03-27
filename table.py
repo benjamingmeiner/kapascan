@@ -26,7 +26,7 @@ class SerialConnection:
         # TODO catch exceptions here
         self.serial_connection.open()
         self.serial_connection.write(b"\n\n")
-        time.sleep(2)
+        time.sleep(0.5)
         self.serial_connection.readlines()
         print("Connected to serial port")
 

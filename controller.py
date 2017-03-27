@@ -176,15 +176,15 @@ class DataSocket:
     with the sampling frequency. If the controller is set to one of the other
     trigger modes, data will be available not until a signal is present at the
     trigger input, or the command "GDM" is sent over the control port.
-    
-    The transmitted data is stored in a socket buffer which is handled by the 
+
+    The transmitted data is stored in a socket buffer which is handled by the
     operating system. You can fetch this buffered data via method ``get_data``.
     If you don't fetch the buffered data, the buffer may overflow and further
     data acquisition is interrupted.
 
     When ``data_port`` is different from the standard port 10001, it can be
     retrieved via the control command "GDP"
-      >>> control_socket = ControlSocket(host) 
+      >>> control_socket = ControlSocket(host)
       >>> control_socket.connect()
       >>> data_port = control_socket.command("GDP")
       >>> control_socket.disconnect()
@@ -403,9 +403,9 @@ class Controller:
         """
         Check all relevant measurement parameters of the controller.
 
-        This methods queries the status of the controller and compares it to the 
+        This methods queries the status of the controller and compares it to the
         previous status that was saved as an attribute. It prints out a warning
-        if the status changed between to subsequent calls. 
+        if the status changed between to subsequent calls.
         """
         try:
             response1 = self.control_socket.command("STS")
@@ -457,4 +457,3 @@ class Controller:
             print(error)
         finally:
             self.data_socket.disconnect()
-
