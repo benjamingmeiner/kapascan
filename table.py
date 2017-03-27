@@ -78,9 +78,11 @@ class Table:
 
     def get_status(self):
         """ """
-        # TODO include position in output and return
         response = self.serial_connection.command("?")[0].strip("<>").split("|")
-        return response[0]
+        status = response[0]
+        position = response[1][5:].split(",")
+        position = tuple(float(p) for p in position)
+        return status, position
 
     def home(self):
         self.serial_connection.command("$H")
@@ -103,9 +105,13 @@ class Table:
         if mode not in Table().g_code.keys():
             print("Unrecognized move mode!")
         self.serial_connection.command("{} X{} Y{}".format(self.g_code[mode], x, y))
-        # TODO return position after movement
-        while self.get_status().lower() != "idle":
-            time.sleep(0.2)
+        while True:
+            status, position = self.get_status()
+            if status.lower() == "idle":
+                break
+            else:
+                time.sleep(0.2)
+        return position
 
     def get_resolution(self):
         """Get the resolution of each axis in steps/mm."""
