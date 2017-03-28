@@ -113,6 +113,9 @@ class Table:
             #    time.sleep(0.1)
         return position
 
+    def jog(self, x=0, y=0, f=100, mode='relative'):
+        self.serial_connection.command("$J={} X{} Y{} F{}".format(self.g_code[mode], x, y, f))
+
     def get_resolution(self):
         """Get the resolution of each axis in steps/mm."""
         response = self.serial_connection.command("$$")
