@@ -1,5 +1,6 @@
 """
-This module provides an easy to use interface to grbl that allows basic table movements, as needed for measurements.
+This module provides an easy to use interface for grbl that allows basic table
+movements.
 
 Class listing
 -------------
@@ -10,12 +11,14 @@ Table :
 
 Notes
 -----
-The control of the table is performed via the class methods of ``Table``. The class ``SerialConnection`` provides the low-level access to the serial port of the Arduino. All end-user functionality of the interface is implemented in class
+The control of the table is performed via the class methods of ``Table``. The
+class ``SerialConnection`` provides the low-level access to the serial port of
+the Arduino. All end-user functionality of the interface is implemented in class
 ``Table``, though.
 """
+
 import time
 import serial
-
 
 # TODO push message checking, alarm usw...
 
@@ -28,8 +31,7 @@ class SerialConnection:
     Interface to the serial port of the Arduino UNO running grbl.
 
     An overview of all command that are understood by grbl can be found in the
-    grbl wiki at:
-    https://github.com/gnea/grbl/wiki
+    grbl wiki at https://github.com/gnea/grbl/wiki.
 
     Parameters
     ----------
@@ -41,7 +43,7 @@ class SerialConnection:
         The time in seconds that is waited when receiving input via readline()
         or readlines() methods.
     """
-    def __init__(self, port, baudrate=115200, timeout=1):
+    def __init__(self, serial_port, baudrate=115200, timeout=1):
         self.serial_connection = serial.Serial()
         self.serial_connection.port = port
         self.serial_connection.baudrate = baudrate
@@ -51,10 +53,11 @@ class SerialConnection:
     def connect(self):
         """
         Open the serial connection.
-        The connection cannot be used by another application at the same time.
+        The serial port cannot be used by another application at the same time.
         """
         # TODO catch exceptions here
-        # TODO check response from first readlines. (alarm?, welcome message, nothing?)
+        # TODO check response from first readlines. (alarm?, welcome message,
+        #      nothing?)
         # TODO check what can be read if device in alarm mode
         self.serial_connection.open()
         self.serial_connection.write(b"\n\n")
@@ -75,7 +78,8 @@ class SerialConnection:
         Parameters
         ----------
         com : string
-            The command to be sent without trailing newline or carriage return.
+            The command to be sent without trailing newline or carriage return 
+            character.
 
         Returns
         -------
@@ -87,7 +91,8 @@ class SerialConnection:
         self.serial_connection.write(com.encode('ascii') + b"\n")
         response = []
         while True:
-            res = self.serial_connection.readline().decode('ascii').strip("\r\n")
+            res = self.serial_connection.readline()
+            res = res.decode('ascii').strip("\r\n")
             if "ok" in res or "error" in res:
                 break
             else:
@@ -95,6 +100,7 @@ class SerialConnection:
         return response
 
 class Table:
+    # TODO grbl
     """
     Interface to the Arduino.
     
@@ -130,13 +136,22 @@ class Table:
 
         position : tuple of floats
             The current machine position.
+
+        Raises
+        ------
+        TableError :
+            if no machine position (MPos) is present in grbl status report.
         """
         response = self.serial_connection.command("?")[0].strip("<>").split("|")
         status = response[0]
-        # TODO check for existence of prefix of position (MPos) see https://github.com/gnea/grbl/wiki/Grbl-v1.1-Interface (end of file)
-        position = response[1][5:].split(",")
+        position = response[1]
+        if position.lower().startswith("mpos"):
+            position = position[5:].split(",")
+        else:
+            raise TableError("No machine position present in status report."
+                             "Configure grbl!")
         position = tuple(float(p) for p in position)
-        return status, position
+        return status, position[0:2]
 
     def get_resolution(self):
         """Get the resolution of each axis in steps/mm."""
@@ -146,9 +161,7 @@ class Table:
                 var, x_res = r.split("=")
             if r.startswith("$101"):
                 var, y_res = r.split("=")
-            if r.startswith("$102"):
-                var, z_res = r.split("=")
-        return float(x_res), float(y_res), float(z_res)
+        return float(x_res), float(y_res)
 
     def get_max_travel(self):
         """Get the maximal travel distance of each axis in mm."""
@@ -158,9 +171,7 @@ class Table:
                 var, x_max = r.split("=")
             if r.startswith("$131"):
                 var, y_max = r.split("=")
-            if r.startswith("$132"):
-                var, z_max = r.split("=")
-        return float(x_max), float(y_max), float(z_max)
+        return float(x_max), float(y_max)
 
     def home(self):
         """Start the homing cycle."""
@@ -189,7 +200,8 @@ class Table:
         if mode not in Table().g_code.keys():
             print("Unrecognized move mode!")
         # TODO add G1 and feed rate
-        self.serial_connection.command("{} X{} Y{}".format(self.g_code[mode], x, y))
+        self.serial_connection.command("{} X{} Y{}".format(
+            self.g_code[mode], x, y))
         while True:
             status, position = self.get_status()
             if status.lower() == "idle":

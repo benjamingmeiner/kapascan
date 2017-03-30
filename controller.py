@@ -340,8 +340,8 @@ class Controller:
       >>>    controller.get_data(data_points=100, channels=(0,1))
       >>> controller.disconnect()
     """
-    def __init__(self, host='192.168.254.173', control_port=23,
-                 data_port=10001, sensor=Sensor('1234')):
+    def __init__(self, host, control_port=23, data_port=10001, 
+                 sensor=Sensor('1234')):
         self.sensor = sensor
         self.control_socket = ControlSocket(host, control_port)
         self.data_socket = DataSocket(host, data_port)
@@ -383,7 +383,7 @@ class Controller:
             print("Set sampling time: {} ms".format(float(actual_time) / 1000))
             return actual_time
 
-    def set_trigger_mode(self, mode="continuous"):
+    def set_trigger_mode(self, mode):
         """
         Set the trigger mode.
 
@@ -393,7 +393,8 @@ class Controller:
             possible options are ``continuous``, ``rising_edge``, ``high_level``
             and ``gate_rising_edge``. See manual for an explanation of the modes.
         """
-        trg_nr = {"continuous": 0, "rising_edge": 1, "high_level": 2, "gate_rising_edge": 3}
+        trg_nr = {"continuous": 0, "rising_edge": 1,
+                  "high_level": 2, "gate_rising_edge": 3}
         try:
             response = self.control_socket.command("TRG{}".format(trg_nr[mode]))
         except DeviceError as error:
@@ -413,14 +414,14 @@ class Controller:
             status_response = response1 + ";LIN" + response2
         except DeviceError as error:
             print(error)
-        else:
-            if self.status_response is not None:
-                status_new = status_response.split(';')
-                status_old = self.status_response.split(';')
-                for new, old in zip(status_new, status_old):
-                    if new != old:
-                        print("WARNING: Changed parameter: {} to {}.".format(old, new))
-            self.status_response = status_response
+        if self.status_response is not None:
+            status_new = status_response.split(';')
+            status_old = self.status_response.split(';')
+            for new, old in zip(status_new, status_old):
+                if new != old:
+                    print("WARNING: "
+                          "Changed parameter: {} to {}.".format(old, new))
+        self.status_response = status_response
 
     def trigger(self):
         """ Trigger a single measurement."""
@@ -447,7 +448,7 @@ class Controller:
         return data / 0xffffff * self.sensor.range
 
     @contextmanager
-    def acquisition(self, mode="rising_edge", sampling_time=0):
+    def acquisition(self, mode, sampling_time):
         try:
             self.set_sampling_time(sampling_time)
             self.set_trigger_mode(mode)
