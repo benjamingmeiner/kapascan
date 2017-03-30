@@ -22,7 +22,31 @@ class Measurement():
         self.table.disconnect()
         self.controller.disconnect()
 
-    def measure(self, x_start, y_start, x_stop, y_stop, stepsize):
+    """
+    Procedure:
+    ----------
+    - move_out()
+    -   place sample
+    - find_range()
+    - measure_sample()
+    - move_out()
+    -   remove sample
+    - measure_background()
+    """
+
+    def move_out(self)
+        pass
+
+    def find_range(self):
+        pass
+
+    def measure_background(self):
+        pass
+
+    def measure_sample(self):
+        pass
+
+    def scan(self, x_start, y_start, x_stop, y_stop, stepsize):
         x_res, y_res = self.table.get_resolution()[0:2]
         if not (x_res * stepsize).is_integer() or not (y_res * stepsize).is_integer():
             print("WARNING: Measurement step size is not a multiple of motor step size!" +
@@ -37,3 +61,4 @@ class Measurement():
                 data = self.controller.get_data(200, channels=[0])
                 z[i] = data.mean()
         return x_range, y_range, np.transpose(z.reshape((len(x_range), len(y_range))))
+
