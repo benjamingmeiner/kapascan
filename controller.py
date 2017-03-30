@@ -15,8 +15,8 @@ Notes
 -----
 Data acquisition and control of various parameters of the controller is
 performed via the class methods of ``Controller``. The classes ``ControlSocket``
-and ``DataSocket`` provide the low-level access to the control and data port of the
-device. All end-user functionality of the interface is implemented in class
+and ``DataSocket`` provide the low-level access to the control and data port of
+the device. All end-user functionality of the interface is implemented in class
 ``Controller``, though.
 
 Example
@@ -37,15 +37,17 @@ import numpy as np
 from contextlib import contextmanager
 
 # TODO check all IO for exceptions that can be raised
-# TODO handle exceptions properly and at the right place; to the user
 # TODO check measurement frame counter
 # TODO use proper sensor class
-# TODO use proper default values of function arguments
 
 class DeviceError(Exception):
     """Simple exception class used for all errors in this module."""
-    pass
 
+class UnknownCommandError(DeviceError):
+    """Raise when an unknown command is sent to controller."""
+
+class WrongParameterError(DeviceError):
+    """Raise when a command with a wrong parameter is sent to the controller."""
 
 class ControlSocket:
     """
@@ -71,7 +73,7 @@ class ControlSocket:
       >>> print(control_socket.command("VER"))
       >>> control_socket.disconnect()
     """
-    def __init__(self, host, control_port=23, timeout=5):
+    def __init__(self, host, control_port=23, timeout=3):
         self.host = host
         self.control_port = control_port
         self.timeout = timeout
@@ -142,9 +144,9 @@ class ControlSocket:
             if response.endswith("OK"):
                 return response[:-2]
             elif response == "$UNKNOWN COMMAND":
-                raise DeviceError("Unknown command: {}".format(com))
+                raise UnknownCommandError(com)
             elif response == "$WRONG PARAMETER":
-                raise DeviceError("Wrong parameter in command {}".format(com))
+                raise WrongParameterError(com)
         raise DeviceError("Unexpected response from device: {}".format(response))
 
 
@@ -211,7 +213,7 @@ class DataSocket:
     ...               ...         ...
     ================ ============ =============================================
     """
-    def __init__(self, host, data_port=10001, timeout=5):
+    def __init__(self, host, data_port=10001, timeout=3):
         self.host = host
         self.data_port = data_port
         self.timeout = timeout
@@ -263,16 +265,16 @@ class DataSocket:
         payload_size = bytes_per_frame * nr_of_frames
         return nr_of_channels, nr_of_frames, bytes_per_frame, payload_size
 
-    def get_data(self, data_points=1, channels=(0, 1)):
+    def get_data(self, data_points, channels):
         """
         Get measurement data from the controller.
 
         Parameters
         ----------
-        data_points : int, optional
-            Number of data points to be received.
-        channels : array_like, optional
-            A tuple of the channels to get the data from.
+        data_points : int
+            The number of data points to be received.
+        channels : list of ints
+            A list of the channels to get the data from.
 
         Returns
         -------
@@ -284,11 +286,12 @@ class DataSocket:
             If the number of requested channels is larger than the actual
             channel number.
         """
+        channels = list(channels)
         data_stream = b''
-        data_type = np.dtype(int).newbyteorder('<')
-        data = np.zeros((data_points, len(channels)), data_type)
-        received_data_points = 0
-        while received_data_points < data_points:
+        dtype = np.dtype(int).newbyteorder('<')
+        data = np.zeros((data_points, len(channels)), dtype)
+        received_points = 0
+        while received_points < data_points:
             while len(data_stream) < 32:
                 try:
                     data_stream += self.data_socket.recv(65536)
@@ -304,10 +307,10 @@ class DataSocket:
                 data_stream += self.data_socket.recv(65536)
             payload = data_stream[32:32 + payload_size]
             for i in range(nr_of_frames):
-                if received_data_points < data_points:
-                    data[received_data_points] = np.frombuffer(
-                        payload[i*bytes_per_frame:(i+1)*bytes_per_frame], data_type)[list(channels)]
-                    received_data_points += 1
+                if received_points < data_points:
+                    frame = payload[i*bytes_per_frame:(i+1)*bytes_per_frame]
+                    data[received_points] = np.frombuffer(frame, dtype)[channels]
+                    received_points += 1
                 else:
                     break
             data_stream = data_stream[32+payload_size:]
@@ -373,15 +376,11 @@ class Controller:
         actual_time : float
             The actual sampling time.
         """
-        try:
-            sampling_time = int(sampling_time * 1000)
-            response = self.control_socket.command("STI{}".format(sampling_time))
-        except DeviceError as error:
-            print(error)
-        else:
-            actual_time = response.strip(",")
-            print("Set sampling time: {} ms".format(float(actual_time) / 1000))
-            return actual_time
+        sampling_time = int(sampling_time * 1000)
+        response = self.control_socket.command("STI{}".format(sampling_time))
+        actual_time = response.strip(",")
+        print("Set sampling time: {} ms".format(float(actual_time) / 1000))
+        return actual_time
 
     def set_trigger_mode(self, mode):
         """
@@ -389,16 +388,12 @@ class Controller:
 
         Parameters
         ----------
-        mode : str
-            possible options are ``continuous``, ``rising_edge``, ``high_level``
-            and ``gate_rising_edge``. See manual for an explanation of the modes.
+        mode : str {'continuous', 'rising_edge', 'high_level', 'gate_rising_edge'}
+            See manual for an explanation of the modes.
         """
         trg_nr = {"continuous": 0, "rising_edge": 1,
                   "high_level": 2, "gate_rising_edge": 3}
-        try:
-            response = self.control_socket.command("TRG{}".format(trg_nr[mode]))
-        except DeviceError as error:
-            print(error)
+        response = self.control_socket.command("TRG{}".format(trg_nr[mode]))
 
     def check_status(self):
         """
@@ -408,12 +403,9 @@ class Controller:
         previous status that was saved as an attribute. It prints out a warning
         if the status changed between to subsequent calls.
         """
-        try:
-            response1 = self.control_socket.command("STS")
-            response2 = self.control_socket.command("LIN?")
-            status_response = response1 + ";LIN" + response2
-        except DeviceError as error:
-            print(error)
+        response1 = self.control_socket.command("STS")
+        response2 = self.control_socket.command("LIN?")
+        status_response = response1 + ";LIN" + response2
         if self.status_response is not None:
             status_new = status_response.split(';')
             status_old = self.status_response.split(';')
@@ -435,11 +427,8 @@ class Controller:
         ----------
         data_points : int, optional
             number of data points to be measured (per channel).
-        sampling_time : float, optional
-            Desired sampling time in ms. If omitted, do not attempt to change
-            the sampling time.
-        channels : array_like, optional
-            A tuple of the channels to get the data from.
+        channels : list of ints, optional
+            A list of the channels to get the data from.
         """
         return self.scale(self.data_socket.get_data(data_points, channels))
 
@@ -449,12 +438,22 @@ class Controller:
 
     @contextmanager
     def acquisition(self, mode, sampling_time):
+        """
+        Start the actual data acquisition by connecting to the data socket.
+
+        Parameters
+        ----------
+        mode : str {'continuous', 'rising_edge', 'high_level', 'gate_rising_edge'}
+            The trigger mode.
+        sampling_time : float
+            The desired sampling time in ms. The controller automatically
+            chooses the closest possible sampling time.
+        """
         try:
             self.set_sampling_time(sampling_time)
             self.set_trigger_mode(mode)
             self.data_socket.connect()
             yield
-        except DeviceError as error:
-            print(error)
         finally:
             self.data_socket.disconnect()
+
