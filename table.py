@@ -45,7 +45,7 @@ class SerialConnection:
     """
     def __init__(self, serial_port, baudrate=115200, timeout=1):
         self.serial_connection = serial.Serial()
-        self.serial_connection.port = port
+        self.serial_connection.port = serial_port
         self.serial_connection.baudrate = baudrate
         self.serial_connection.timeout = timeout
         self.serial_connection.dtr = None
@@ -55,11 +55,19 @@ class SerialConnection:
         Open the serial connection.
         The serial port cannot be used by another application at the same time.
         """
-        # TODO catch exceptions here
         # TODO check response from first readlines. (alarm?, welcome message,
         #      nothing?)
-        # TODO check what can be read if device in alarm mode
-        self.serial_connection.open()
+        # TODO check what can be read if device in alarm mode (nothing!)
+        while True:
+            try:
+                self.serial_connection.open()
+                break
+            except PermissionDeniedError:
+                print("{} is already in use by another application.".format(
+                    self.serial_connection.port)
+                c = input("Retry (y/n)? ")
+                if c.lower() not in ["", "y", "yes"]:
+                    break
         self.serial_connection.write(b"\n\n")
         time.sleep(0.5)
         self.serial_connection.readlines()
