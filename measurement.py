@@ -28,6 +28,7 @@ class Measurement():
     ----------
     - move_out()
     -   place sample
+    - move_back()
     - find_range()
     - measure_sample()
     - move_out()
@@ -46,10 +47,31 @@ class Measurement():
         x_max, y_max = self.table.get_max_travel()[0:2]
         self.table.move(x_max - 0.1, y_max - 0.1, 'absolute')
 
-    def find_range(self):
-        while True:
-            break
-        pass
+    def find_range(self, s, f):
+        stay = True
+        while stay:
+            chars = input("'h' 'j' 'k' 'l' to move; 'q' to quit: ")
+            for c in chars:
+                num = ""
+                if c.isdigit():
+                    num + = c
+                elif c in "hjklq":
+                    r = int(num) if num != "" else 1
+                    for i in range(r):
+                        if c == "h":
+                            pos = table.jog(x=s, f=f)
+                        elif c == "j":
+                            pos = table.jog(y=-s, f=f)
+                        elif c == "k":
+                            pos = table.jog(y=s, f=f)
+                        elif c == "l":
+                            pos = table.jog(x=-s, f=f)
+                        elif c == "q":
+                            stay = False
+                            break
+                else:
+                    print("Not a valid input character: {}".format(c))
+            print("X: {} | Y: {}".format(*pos))
 
     def measure_background(self):
         pass
