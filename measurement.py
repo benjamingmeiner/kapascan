@@ -11,6 +11,7 @@ class Measurement():
 
         self.position = None
         self.area = [None, None]
+        self.stepsize = None
         self.background_data = None
         self.sample_data = None
 
@@ -33,7 +34,7 @@ class Measurement():
     - move_away()
     -   place sample
     - move_back()
-    - find_range()
+    - mark_out()
     - measure_sample()
     - move_away()
     -   remove sample
@@ -62,23 +63,25 @@ class Measurement():
         points.
         """
         print("Move to lower edge of measuring area!")
-        self.area[0] = origin = self.table.cruize(0.1, 100)
+        self.area[0] = self.table.cruize(0.1, 100)
         print("Move to upper edge of measurement area!")
         self.area[1] = self.table.cruize(0,1, 100)
 
     def measure_background(self):
-        pass
+        self.background_data = self.scan(self.area, self.stepsize)    
 
     def measure_sample(self):
-        pass
+        self.sample_data = self.scan(self.area, self.stepsize)
 
-    def scan(self, x_start, y_start, x_stop, y_stop, stepsize):
+    def scan(self, area, stepsize):
+        (x0, y0), (x1, y1) = area
         x_res, y_res = self.table.get_resolution()[0:2]
-        if not (x_res * stepsize).is_integer() or not (y_res * stepsize).is_integer():
+        if (not (x_res * stepsize).is_integer() or
+            not (y_res * stepsize).is_integer()):
             print("WARNING: Measurement step size is not a multiple of motor step size!" +
                   "Stepper resolution is [steps/mm]  X: {}  Y: {}".format(x_res, y_res))
-        x_range = np.arange(x_start, x_stop, stepsize, dtype=np.float)
-        y_range = np.arange(y_start, y_stop, stepsize, dtype=np.float)
+        x_range = np.arange(x0, x1, stepsize, dtype=np.float)
+        y_range = np.arange(y0, y1, stepsize, dtype=np.float)
         positions = list(itertools.product(x_range, y_range))
         z = np.zeros(len(positions))
         for i, (xi, yi) in enumerate(positions):
