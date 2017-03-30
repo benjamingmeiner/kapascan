@@ -27,7 +27,8 @@ class SerialConnection:
     """
     Interface to the serial port of the Arduino UNO running grbl.
 
-    An overview of all command that are understood by grbl can be found in the grbl wiki at:
+    An overview of all command that are understood by grbl can be found in the
+    grbl wiki at:
     https://github.com/gnea/grbl/wiki
 
     Parameters
@@ -36,8 +37,9 @@ class SerialConnection:
         The serial port on the host, e.g. 'COM3'.
     baudrate : int, optional
         The baudrate of the connection. As of grbl v1.1 this defaults to 115200
-    timeout : int, otional
-        The time in seconds that is waited when receiving input via readline() and readlines() methods.
+    timeout : int, optional
+        The time in seconds that is waited when receiving input via readline() or
+        readlines() methods.
     """
     def __init__(self, port, baudrate=115200, timeout=1):
         self.serial_connection = serial.Serial()
@@ -49,7 +51,7 @@ class SerialConnection:
     def connect(self):
         """Open the serial connection. (Connection cannot be used by another application at the same time)"""
         # TODO catch exceptions here
-        # TODO check response from first readlines. (alarm?, welcome meassage, nothing?)
+        # TODO check response from first readlines. (alarm?, welcome message, nothing?)
         # TODO check what can be read if device in alarm mode
         self.serial_connection.open()
         self.serial_connection.write(b"\n\n")
@@ -64,7 +66,7 @@ class SerialConnection:
 
     def command(self, com):
         """
-        Send a command over the serial connection and returns the response of the device.
+        Send a command over the serial connection and return the response of the device.
 
         Parameters
         ----------
@@ -165,7 +167,8 @@ class Table:
 
     def jog(self, x=0, y=0, f=100, mode='relative'):
         """ Move the table in jogging mode.
-        Jogging mode doesn't alter the g-code parser state. So parameters like feed rate or movement mode don't have to be reset after jogging.
+        Jogging mode doesn't alter the g-code parser state. So parameters like
+        feed rate or movement mode don't have to be reset after jogging.
 
         Parameters
         ----------
@@ -193,4 +196,18 @@ class Table:
             if r.startswith("$102"):
                 var, z_res = r.split("=")
         return float(x_res), float(y_res), float(z_res)
+
+    def get_max_travel(self):
+        """Get the maximal travel distance of each axis in mm."""
+        response = self.serial_connection.command("$$")
+        for r in response:
+            if r.startswith("$130"):
+                var, x_max = r.split("=")
+            if r.startswith("$131"):
+                var, y_max = r.split("=")
+            if r.startswith("$132"):
+                var, z_max = r.split("=")
+        return float(x_max), float(y_max), float(z_max)
+
+
 

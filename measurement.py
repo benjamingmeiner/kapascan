@@ -8,6 +8,7 @@ class Measurement():
     def __init__(self):
         self.controller = controller.Controller()
         self.table = table.Table()
+        self.position = None
 
     def __enter__(self):
         self.controller.connect()
@@ -34,10 +35,20 @@ class Measurement():
     - measure_background()
     """
 
-    def move_out(self)
-        pass
+    def move_back(self):
+        if self.position is not None:
+            self.table.move(self.position[0], self.position[1], 'absolute')
+        else:
+            print("No position to move back to.")
+
+    def move_out(self):
+        self.position = self.table.get_status()[1]
+        x_max, y_max = self.table.get_max_travel()[0:2]
+        self.table.move(x_max - 0.1, y_max - 0.1, 'absolute')
 
     def find_range(self):
+        while True:
+            break
         pass
 
     def measure_background(self):
