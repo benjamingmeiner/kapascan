@@ -5,16 +5,18 @@ import itertools
 import numpy as np
 
 class Measurement():
-    def __init__(self, host='192.168.254.173', serial_port='COM3'):
+    def __init__(self, host='192.168.254.173', serial_port='COM3',
+                 area=None, step_size=None, sampling_time=None):
         self.controller = controller.Controller(host)
         self.table = table.Table(serial_port)
+        self.area = area 
+        self.step_size = step_size
+        self.sampling_time = sampling_time
 
         self.position = None
-        self.area = [None, None]
-        self.stepsize = None
-        self.sampling_time = None
         self.background_data = None
         self.sample_data = None
+        self.coordinates = None
 
     def __enter__(self):
         self.controller.connect()
@@ -29,79 +31,188 @@ class Measurement():
         self.table.disconnect()
         self.controller.disconnect()
 
-    """
-    Procedure:
-    ----------
-    - move_away()
-    -   place sample
-    - move_back()
-    - mark_out()
-    - measure_sample()
-    - move_away()
-    -   remove sample
-    - measure_background()
-    """
+    def move_away(self):
+        """
+        Moves the table to the outermost position. The previous position is
+        preserved as an attribute, to be able to move back where you started.
+        This function is useful to place the sample on the table without the 
+        sensor getting in the way. 
+        """
+        self.position = self.table.get_status()[1]
+        x_max, y_max = self.table.get_max_travel()
+        self.table.move(x_max - 0.1, y_max - 0.1, 'absolute')
+        return self.position
 
     def move_back(self):
-        """Move table to the stored position."""
+        """Moves the table back to the position stored by `move_away()`."""
         if self.position is not None:
             self.table.move(self.position[0], self.position[1], 'absolute')
         else:
             print("No position to move back to.")
 
-    def move_away(self):
-        """
-        Move table to the outermost position while preserving the previous
-        position as an attribute.
-        """
-        self.position = self.table.get_status()[1]
-        x_max, y_max = self.table.get_max_travel()
-        self.table.move(x_max - 0.1, y_max - 0.1, 'absolute')
+    def move_to_start(self):
+        """Moves the table to the starting position of the measurement."""
+        if self.area is not None:
+            self.table.move(self.area[0][0], self.area[0][1], 'absolute')
+        else:
+            print("No measurement area set yet.")
 
-    def mark_out(self, s, f):
+    def set_area(self, s, f):
         """
         Mark out the measuring area by manually moving the table to its edge
         points.
         """
         print("Move to lower edge of measuring area!")
-        self.area[0] = self.table.cruize(0.1, 100)
+        pos0 = self.table.cruize(0.1, 100)
         print("Move to upper edge of measurement area!")
-        self.area[1] = self.table.cruize(0,1, 100)
+        pos1 = self.table.cruize(0.1, 100)
+        self.area = (pos0, pos1)
+        print("Set area.")
+        return self.area
 
-    def measure_background(self):
-        """Acquire data from background. Data is stored as attributes."""
-        self.coordinates, self.background_data = self.scan()    
-
-    def measure_sample(self):
-        """Acquire data from sample. Data is stored as attributes."""
-        self.coordinates, self.sample_data = self.scan()
-
-    def scan(self):
+    def scan(self, area=self.area, step_size=self.step_size,
+             sampling_time=self.sampling_time,
+             data_points=self.data_points):
         """
-        Scans the defined area with the class' settings.
+        Rasters the measuring area. Halts at every measuring position and 
+        acquires a certain amount of data points. The mean of this data sample
+        is used as the data value at this position.
+
+        Notes
+        -----
+        All parameters default to their corresponding class attributes.
+        This way you can easily repeat measurements with identical settings.
+
+        Parameters
+        ----------
+        area : tuple {((x0, y0), (x1, y1))}
+            x0, y0: coordinates of lower edge of measuring area
+            x1, y1: coordinates of upper edge of measuring area
+        
+        step_size : float
+            The step size between two measuring points.
+        
+        sampling_time : float
+            The desired sampling time in ms.
+
+        data_points : int
+            The number of data points to be acquired at each measurement 
+            position.
         """
-        if not (self.sampling_time and self.area and self.data_points):
-            break
-        (x0, y0), (x1, y1) = self.area
+        if not (sampling_time and area and data_points and step_size):
+            raise MeasurementError("Not all parameters have been set yet.")
+        (x0, y0), (x1, y1) = area
         x_res, y_res = self.table.get_resolution()
         # TODO take care of numeric errors
-        if (not (x_res * self.stepsize).is_integer() or
-            not (y_res * self.stepsize).is_integer()):
+        if (not (x_res * step_size).is_integer() or
+            not (y_res * step_size).is_integer()):
             print("WARNING: Measurement step size is not a multiple of motor "
                   "step size! Stepper resolution is [steps/mm] "
                   "X: {}  Y: {}".format(x_res, y_res))
-        x_range = np.arange(x0, x1, self.stepsize, dtype=np.float)
-        y_range = np.arange(y0, y1, self.stepsize, dtype=np.float)
+        x_range = np.arange(x0, x1, step_size, dtype=np.float)
+        y_range = np.arange(y0, y1, step_size, dtype=np.float)
         positions = list(itertools.product(x_range, y_range))
         z = np.zeros(len(positions))
         for i, (xi, yi) in enumerate(positions):
-            self.table.move(x=xi, y=yi, mode='absolute')
-            with self.controller.acquisition(mode='continuous',
-                                             sampling_time=self.sampling_time):
-                data = self.controller.get_data(self.data_points, channels=[0])
+            self.table.move(xi, yi, 'absolute')
+            with self.controller.acquisition('continuous', sampling_time):
+                data = self.controller.get_data(data_points, channels=[0])
                 z[i] = data.mean()
         z = np.transpose(z.reshape((len(x_range), len(y_range))))
         return (x_range, y_range), z
+ 
+        def measure(self):
+            """
+            Starts a guided measurement cycle.
 
-    def get_data(self):
-        return self.coordinates, self.sample_data[2] - self.background_data[2]
+            Returns
+            -------
+            coordinates : tuple of arrays {(x, y)}
+                arrays with the vectors spanning the measuring area
+            
+            background_data : 2D array
+                The acquired data without sample
+
+            sample_data : 2D array
+                The acquired data with the sample
+            """
+            self.move_away()
+            input("Place sample!")
+                if not query_yes_no("Continue?"):
+                    print("Abort.")
+                    return
+
+            self.move_back()
+            if self.area is  None:
+                self.set_area()
+            else:
+                print("Measuring area already set.")
+                if query_yes_no("Mark out area again?"):
+                    self.set_area()
+            print("Done.")
+
+            if not (self.sampling_time and self.area and
+                    self.data_points and self.step_size):
+                print("Error: Not all parameters have been set yet.")
+                print("Abort.")
+                return
+
+            print("Current settings:"
+                  "  area: {} -- {}\n".format(*self.area)
+                  "  step size: {} mm\n".format(self.step_size)
+                  "  data points: {}\n".format(self.data_points)
+                  "  sampling time: {} ms\n".format(self.sampling_time))
+            if not query_yes_no("Start measurement?"):
+                print("Abort.")
+                return
+            self.coordinates, self.sample_data = self.scan()
+            print("Done.")
+
+            self.move_away()
+            input("Remove sample! Press <Enter> to continue.")
+
+            self.move_to start()
+            if not query_yes_no("Start measurement of background?"):
+                print("Abort.")
+                return
+            self.coordinates, self.background_data = self.scan()
+            print("Done.")
+
+            return self.coordinates, self.background_data, self.sample_data
+
+
+def query_yes_no(question, default="yes"):
+    """
+    Asks a yes/no question via input() and returns the answer.
+
+    Parameters
+    ----------
+    question : str
+        The string that is presented to the user.
+
+    default : str {"yes", "no"}, optional
+        The presumed answer if the user just hits <Enter>.
+
+    Returns
+    -------
+    answer : bool
+        True for "yes" or False for "no".
+    """
+    valid = {"yes": True, "y": True, "ye": True, "no": False, "n": False}
+    if default is None:
+        prompt = " [y/n] "
+    elif default == "yes":
+        prompt = " [Y/n] "
+    elif default == "no":
+        prompt = " [y/N] "
+    else:
+        raise ValueError("invalid default answer: '%s'" % default)
+    while True:
+        choice = input(question + prompt).lower()
+        if default is not None and choice == '':
+            return valid[default]
+        elif choice in valid:
+            return valid[choice]
+        else:
+            print("Please respond with 'yes' or 'no' (or 'y' or 'n').")
+ 
