@@ -8,7 +8,11 @@ class Measurement():
     def __init__(self):
         self.controller = controller.Controller()
         self.table = table.Table()
+
         self.position = None
+        self.area = [None, None]
+        self.background_data = None
+        self.sample_data = None
 
     def __enter__(self):
         self.controller.connect()
@@ -26,52 +30,41 @@ class Measurement():
     """
     Procedure:
     ----------
-    - move_out()
+    - move_away()
     -   place sample
     - move_back()
     - find_range()
     - measure_sample()
-    - move_out()
+    - move_away()
     -   remove sample
     - measure_background()
     """
 
     def move_back(self):
+        """Move table to the stored position."""
         if self.position is not None:
             self.table.move(self.position[0], self.position[1], 'absolute')
         else:
             print("No position to move back to.")
 
-    def move_out(self):
+    def move_away(self):
+        """
+        Move table to the outermost position while preserving the previous
+        position as an attribute.
+        """
         self.position = self.table.get_status()[1]
         x_max, y_max = self.table.get_max_travel()[0:2]
         self.table.move(x_max - 0.1, y_max - 0.1, 'absolute')
 
-    def find_range(self, s, f):
-        stay = True
-        while stay:
-            chars = input("'h' 'j' 'k' 'l' to move; 'q' to quit: ")
-            for c in chars:
-                num = ""
-                if c.isdigit():
-                    num + = c
-                elif c in "hjklq":
-                    r = int(num) if num != "" else 1
-                    for i in range(r):
-                        if c == "h":
-                            pos = table.jog(x=s, f=f)
-                        elif c == "j":
-                            pos = table.jog(y=-s, f=f)
-                        elif c == "k":
-                            pos = table.jog(y=s, f=f)
-                        elif c == "l":
-                            pos = table.jog(x=-s, f=f)
-                        elif c == "q":
-                            stay = False
-                            break
-                else:
-                    print("Not a valid input character: {}".format(c))
-            print("X: {} | Y: {}".format(*pos))
+    def mark_out(self, s, f):
+        """
+        Mark out the measuring area by manually moving the table to its edge
+        points.
+        """
+        print("Move to lower edge of measuring area!")
+        self.area[0] = origin = self.table.cruize(0.1, 100)
+        print("Move to upper edge of measurement area!")
+        self.area[1] = self.table.cruize(0,1, 100)
 
     def measure_background(self):
         pass

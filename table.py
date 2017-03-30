@@ -38,8 +38,8 @@ class SerialConnection:
     baudrate : int, optional
         The baudrate of the connection. As of grbl v1.1 this defaults to 115200
     timeout : int, optional
-        The time in seconds that is waited when receiving input via readline() or
-        readlines() methods.
+        The time in seconds that is waited when receiving input via readline()
+        or readlines() methods.
     """
     def __init__(self, port, baudrate=115200, timeout=1):
         self.serial_connection = serial.Serial()
@@ -49,7 +49,10 @@ class SerialConnection:
         self.serial_connection.dtr = None
 
     def connect(self):
-        """Open the serial connection. (Connection cannot be used by another application at the same time)"""
+        """
+        Open the serial connection.
+        The connection cannot be used by another application at the same time.
+        """
         # TODO catch exceptions here
         # TODO check response from first readlines. (alarm?, welcome message, nothing?)
         # TODO check what can be read if device in alarm mode
@@ -66,7 +69,8 @@ class SerialConnection:
 
     def command(self, com):
         """
-        Send a command over the serial connection and return the response of the device.
+        Send a command over the serial connection and return the response of
+        the device.
 
         Parameters
         ----------
@@ -121,8 +125,8 @@ class Table:
         Returns
         -------
         status : string
-            The current state of the machine.
-            Possible values: Idle, Run, Hold, Jog, Alarm, Door, Check, Home, Sleep
+            The current state of the machine. Possible values: 
+            Idle, Run, Hold, Jog, Alarm, Door, Check, Home, Sleep
 
         position : tuple of floats
             The current machine position.
@@ -133,57 +137,6 @@ class Table:
         position = response[1][5:].split(",")
         position = tuple(float(p) for p in position)
         return status, position
-
-    def home(self):
-        """Start the homing cycle."""
-        self.serial_connection.command("$H")
-
-    def move(self, x=0, y=0, mode):
-        """
-        Moves the table to the desired coordinates.
-        Blocks until finished.
-
-        Parameters
-        ----------
-        x, y : float
-            The coordinates to move to
-
-        mode : string
-            Move in relative or absolute coordinates with ``relative`` or
-            ``absolute``
-        """
-        mode = mode.lower()
-        if mode not in Table().g_code.keys():
-            print("Unrecognized move mode!")
-        # TODO add G1 and feed rate
-        self.serial_connection.command("{} X{} Y{}".format(self.g_code[mode], x, y))
-        while True:
-            status, position = self.get_status()
-            if status.lower() == "idle":
-                break
-            #else:
-            #    time.sleep(0.1)
-        return position
-
-    def jog(self, x=0, y=0, f=100, mode='relative'):
-        """ Move the table in jogging mode.
-        Jogging mode doesn't alter the g-code parser state. So parameters like
-        feed rate or movement mode don't have to be reset after jogging.
-
-        Parameters
-        ----------
-        x, y : float
-            The coordinates to move to
-
-        f : float
-            The feed rate in mm/min
-
-        mode : string, optional
-            Move in relative or absolute coordinates with ``relative`` or
-            ``absolute``
-        """
-        self.serial_connection.command("$J={} X{} Y{} F{}".format(
-            self.g_code[mode], x, y, f))
 
     def get_resolution(self):
         """Get the resolution of each axis in steps/mm."""
@@ -209,5 +162,88 @@ class Table:
                 var, z_max = r.split("=")
         return float(x_max), float(y_max), float(z_max)
 
+    def home(self):
+        """Start the homing cycle."""
+        self.serial_connection.command("$H")
 
+    def move(self, x=0, y=0, mode):
+        """
+        Moves the table to the desired coordinates.
+        Blocks until finished.
+
+        Parameters
+        ----------
+        x, y : float
+            The coordinates to move to
+
+        mode : string
+            Move in relative or absolute coordinates with ``relative`` or
+            ``absolute``
+        
+        Returns
+        -------
+        position : tuple of floats
+            the machine position after the movement
+        """
+        mode = mode.lower()
+        if mode not in Table().g_code.keys():
+            print("Unrecognized move mode!")
+        # TODO add G1 and feed rate
+        self.serial_connection.command("{} X{} Y{}".format(self.g_code[mode], x, y))
+        while True:
+            status, position = self.get_status()
+            if status.lower() == "idle":
+                break
+            else:
+                time.sleep(0.1)
+        return position
+
+    def jog(self, x=0, y=0, f=100, mode='relative'):
+        """
+        Move the table in jogging mode.
+        Jogging mode doesn't alter the g-code parser state. So parameters like
+        feed rate or movement mode don't have to be reset after jogging.
+
+        Parameters
+        ----------
+        x, y : float
+            The coordinates to move to
+
+        f : float
+            The feed rate in mm/min
+
+        mode : string, optional
+            Move in relative or absolute coordinates with ``relative`` or
+            ``absolute``
+        """
+        self.serial_connection.command("$J={} X{} Y{} F{}".format(
+            self.g_code[mode], x, y, f))
+
+    def cruize(self, s, f):
+        stay = True
+        while stay:
+            chars = input("'h' 'j' 'k' 'l' to move; 'q' to quit: ")
+            for c in chars:
+                num = ""
+                if c.isdigit():
+                    num + = c
+                elif c in "hjklqs":
+                    r = int(num) if num != "" else 1
+                    for i in range(r):
+                        if c == "h":
+                            self.jog(x=s, f=f)
+                        elif c == "j":
+                            self.jog(y=-s, f=f)
+                        elif c == "k":
+                            self.jog(y=s, f=f)
+                        elif c == "l":
+                            self.jog(x=-s, f=f)
+                        elif c == "q":
+                            stay = False
+                            break
+                else:
+                    print("Not a valid input character: {}".format(c))
+            pos = self.get_status()[1]
+            print("X: {} | Y: {}".format(*pos))
+        return pos
 
