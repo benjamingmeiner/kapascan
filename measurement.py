@@ -138,9 +138,9 @@ class Measurement():
             """
             self.move_away()
             input("Place sample!")
-                if not query_yes_no("Continue?"):
-                    print("Abort.")
-                    return
+            if not query_yes_no("Continue?"):
+                print("Abort.")
+                return
 
             self.move_back()
             if self.area is  None:
@@ -157,10 +157,10 @@ class Measurement():
                 print("Abort.")
                 return
 
-            print("Current settings:"
-                  "  area: {} -- {}\n".format(*self.area)
-                  "  step size: {} mm\n".format(self.step_size)
-                  "  data points: {}\n".format(self.data_points)
+            print("Current settings:" +
+                  "  area: {} -- {}\n".format(*self.area) +
+                  "  step size: {} mm\n".format(self.step_size) +
+                  "  data points: {}\n".format(self.data_points) +
                   "  sampling time: {} ms\n".format(self.sampling_time))
             if not query_yes_no("Start measurement?"):
                 print("Abort.")
@@ -171,7 +171,7 @@ class Measurement():
             self.move_away()
             input("Remove sample! Press <Enter> to continue.")
 
-            self.move_to start()
+            self.move_to_start()
             if not query_yes_no("Start measurement of background?"):
                 print("Abort.")
                 return
