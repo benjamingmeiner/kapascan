@@ -7,6 +7,7 @@ from helper import query_yes_no
 
 import itertools
 import numpy as np
+from timeit import default_timer as timer
 
 
 class MeasurementError(Exception):
@@ -122,13 +123,21 @@ class Measurement():
         x = np.arange(x_range[0], x_range[1], step_size, dtype=np.float)
         y = np.arange(y_range[0], y_range[1], step_size, dtype=np.float)
         positions = list(itertools.product(x, y))
-        z = np.zeros(len(positions))
+        length = len(positions)
+        z = np.zeros(length)
+        self.controller.set_sampling_time(sampling_time)
+        self.controller.set_trigger_mode('continuous')
+        start = timer()
         for i, position in enumerate(positions):
+            print("{} of {}".format(i, length))
             self.table.move(*position, mode='absolute')
-            with self.controller.acquisition('continuous', sampling_time):
+            with self.controller.acquisition():
                 z[i] = self.controller.get_data(data_points, channels=[0]).mean()
+            end = timer()
+            remaining_time = (length - i) * (end - start) / (i + 1)
+            print("Remaining time: {:.5} min".format(remaining_time / 60))
         z = np.transpose(z.reshape((len(x), len(y))))
-        return np.array((x, y)), z
+        return np.array((x, y)), extent(x, y), z
 
     def measure(self):
         """

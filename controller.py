@@ -437,7 +437,7 @@ class Controller:
         return data / 0xffffff * self.sensor.range
 
     @contextmanager
-    def acquisition(self, mode, sampling_time):
+    def acquisition(self, mode=None, sampling_time=None):
         """
         Start the actual data acquisition by connecting to the data socket.
 
@@ -450,8 +450,10 @@ class Controller:
             chooses the closest possible sampling time.
         """
         try:
-            self.set_sampling_time(sampling_time)
-            self.set_trigger_mode(mode)
+            if mode:
+                self.set_trigger_mode(mode)
+            if sampling_time:
+                self.set_sampling_time(sampling_time)
             self.data_socket.connect()
             yield
         finally:
