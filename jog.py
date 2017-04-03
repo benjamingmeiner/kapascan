@@ -7,8 +7,8 @@ import table
 t = table.Table()
 t.connect()
 
-s=0.06
-f=100
+step=0.06
+feed=100
 
 while True:
     key = ord(getch())
@@ -19,12 +19,12 @@ while True:
     elif key == 224: #Special keys (arrows, f keys, ins, del, etc.)
         key = ord(getch())
         if key == 80: #Down arrow
-            t.jog(y=s, f=f)
+            t.jog(y=step, feed=feed)
         elif key == 72: #Up arrow
-            t.jog(y=-s, f=f)
+            t.jog(y=-step, feed=feed)
         elif key == 75: #Lef arrow
-            t.jog(x=s, f=f)
+            t.jog(x=step, feed=feed)
         elif key == 77: #Right arrow
-            t.jog(x=-s, f=f)
+            t.jog(x=-step, feed=feed)
 
 t.disconnect()

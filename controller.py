@@ -259,8 +259,8 @@ class DataSocket:
         header = struct.unpack('<iiiqihhi', data_stream[0:32])
         channel_field = header[3]
         nr_of_channels = '{0:064b}'.format(channel_field).count('1')
-        nr_of_frames = header[5]
-        bytes_per_frame = header[6]
+        nr_of_frames = header[6]
+        bytes_per_frame = header[5]
         frame_counter = header[7]
         return nr_of_channels, nr_of_frames, bytes_per_frame, frame_counter
 
@@ -299,8 +299,10 @@ class DataSocket:
                     return data
             nr_of_channels, nr_of_frames, bytes_per_frame, frame_counter = \
                 self.inspect_header(data_stream)
-            if received_points != frame_counter - 1:
-                raise DeviceError("Missed frames!")
+#            if received_points != frame_counter - 1:
+#                print(received_points)
+#                print(frame_counter)
+#                raise DeviceError("Missed frames!")
             payload_size = bytes_per_frame * nr_of_frames
             if max(channels) + 1 > nr_of_channels:
                 raise DeviceError("Device has only {} channels.".format(

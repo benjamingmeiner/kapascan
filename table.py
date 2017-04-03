@@ -65,9 +65,10 @@ class SerialConnection:
             try:
                 self.serial_connection.open()
                 break
-            except PermissionDeniedError:
-                print("{} is already in use by another application.".format(
-                    self.serial_connection.port))
+            except serial.SerialException as error:
+                print(error)
+#                print("{} is already in use by another application.".format(
+#                    self.serial_connection.port))
                 c = input("Retry (y/n)? ")
                 if c.lower() not in ["", "y", "yes"]:
                     break
@@ -99,12 +100,16 @@ class SerialConnection:
         """
         # TODO handle other response messages than "ok and error"
         # TODO handle errors (and alarms?)
+        # TODO Make this stable!!!
         self.serial_connection.write(com.encode('ascii') + b"\n")
         response = []
         while True:
             res = self.serial_connection.readline()
             res = res.decode('ascii').strip("\r\n")
-            if "ok" in res or "error" in res:
+            if "ok" in res:
+                break
+            if "error" in res or "Alarm" in res:
+                response.append(res)
                 break
             else:
                 response.append(res)
@@ -154,8 +159,7 @@ class Table:
         TableError :
             if no machine position (MPos) is present in grbl status report.
         """
-        response = self.serial_connection.command(
-            "?")[0].strip("<>").split("|")
+        response = self.serial_connection.command("?")[0].strip("<>").split("|")
         status = response[0]
         position = response[1]
         if position.lower().startswith("mpos"):
@@ -244,25 +248,34 @@ class Table:
         self.serial_connection.command("$J={} X{} Y{} F{}".format(
             self.g_code[mode], x, y, feed))
 
-    def cruize(self, s, feed):
+    def align(self, step, feed):
         stay = True
         while stay:
-            chars = input("'h' 'j' 'k' 'l' to move; 'q' to quit: ")
+            chars = input("'h' 'j' 'k' 'l' to move; "
+                          "'+' '-' to change stepsize; "
+                          "'q' to quit: ")
+            num = ""
             for c in chars:
-                num = ""
                 if c.isdigit():
                     num += c
-                elif c in "hjklqs":
+                elif c in "hjklq+-":
                     r = int(num) if num != "" else 1
+                    num = ""
                     for _ in range(r):
                         if c == "h":
-                            self.jog(x=s, feed=feed)
+                            self.jog(x=step, feed=feed)
                         elif c == "j":
-                            self.jog(y=-s, feed=feed)
+                            self.jog(y=-step, feed=feed)
                         elif c == "k":
-                            self.jog(y=s, feed=feed)
+                            self.jog(y=step, feed=feed)
                         elif c == "l":
-                            self.jog(x=-s, feed=feed)
+                            self.jog(x=-step, feed=feed)
+                        elif c == "+":
+                            step *= 2
+                            print("New step size: {} mm".format(step))
+                        elif c == "-":
+                            step *= 0.5
+                            print("New step size: {} mm".format(step))
                         elif c == "q":
                             stay = False
                             break

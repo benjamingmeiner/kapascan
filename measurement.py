@@ -9,12 +9,10 @@ import numpy as np
 
 
 class MeasurementError(Exception):
-    """ YO """
+    pass
 
 
 class Measurement():
-    """ YO """
-
     def __init__(self, host='192.168.254.173', serial_port='COM3', area=None,
                  step_size=None, sampling_time=None, data_points=None):
         self.controller = controller.Controller(host)
@@ -63,18 +61,25 @@ class Measurement():
         else:
             print("No measurement area set yet.")
 
-    def set_area(self, jog_step=0.1, jog_feed=100):
+    def move_to_center(self):
+        """ Moves to the center (approximately) of the table.""" 
+        self.position = self.table.get_status()[1]
+        x_max, y_max = self.table.get_max_travel()
+        self.table.move(x_max * 0.5, y_max * 0.5, 'absolute')
+        return self.position
+
+    def set_area(self, step=0.2, feed=100):
         """
         Mark out the measuring area by manually moving the table to its edge
         points.
         """
         print("Move to lower edge of measuring area!")
-        pos0 = self.table.cruize(jog_step, jog_feed)
+        pos0 = self.table.align(step, feed)
         print("Move to upper edge of measurement area!")
-        pos1 = self.table.cruize(jog_step, jog_feed)
-        self.settings.area = (pos0, pos1)
+        pos1 = self.table.align(step, feed)
+        self.settings['area'] = (pos0, pos1)
         print("Set area.")
-        return self.settings.area
+        return self.settings['area']
 
     def scan(self, area, step_size, sampling_time, data_points):
         """
@@ -122,7 +127,7 @@ class Measurement():
             with self.controller.acquisition('continuous', sampling_time):
                 z[i] = self.controller.get_data(data_points, channels=[0]).mean()
         z = np.transpose(z.reshape((len(x), len(y))))
-        return (x, y), z
+        return np.array((x, y)), z
 
     def measure(self):
         """
@@ -140,13 +145,13 @@ class Measurement():
             The acquired data with the sample
         """
         self.move_away()
-        input("Place sample!")
+        print("Place sample!")
         if not query_yes_no("Continue?"):
             print("Abort.")
             return
 
-        self.move_back()
-        if self.settings.area is None:
+        self.move_to_center()
+        if self.settings['area'] is None:
             self.set_area()
         else:
             print("Measuring area already set.")
@@ -165,7 +170,7 @@ class Measurement():
         if not query_yes_no("Start measurement?"):
             print("Abort.")
             return
-        self.data.coordinates, self.data.sample = self.scan(**self.settings)
+        self.data['coordinates'], self.data['sample'] = self.scan(**self.settings)
         print("Done.")
 
         self.move_away()
@@ -175,7 +180,7 @@ class Measurement():
         if not query_yes_no("Start measurement of background?"):
             print("Abort.")
             return
-        self.data.coordinates, self.data.background = self.scan(
+        self.data['coordinates'], self.data['background'] = self.scan(
             **self.settings)
         print("Done.")
 
@@ -209,7 +214,8 @@ def query_yes_no(question, default="yes"):
     else:
         raise ValueError("invalid default answer: '%s'" % default)
     while True:
-        choice = input(question + prompt).lower()
+        print(question + prompt, end='')
+        choice = input("--->  ").lower()
         if default is not None and choice == '':
             return valid[default]
         elif choice in valid:
