@@ -22,9 +22,11 @@ import serial
 
 # TODO push message checking, alarm usw...
 
+
 class TableError(Exception):
     """Simple exception class used for all errors in this module."""
     pass
+
 
 class SerialConnection:
     """
@@ -43,6 +45,7 @@ class SerialConnection:
         The time in seconds that is waited when receiving input via readline()
         or readlines() methods.
     """
+
     def __init__(self, serial_port, baudrate=115200, timeout=1):
         self.serial_connection = serial.Serial()
         self.serial_connection.port = serial_port
@@ -64,7 +67,7 @@ class SerialConnection:
                 break
             except PermissionDeniedError:
                 print("{} is already in use by another application.".format(
-                    self.serial_connection.port)
+                    self.serial_connection.port))
                 c = input("Retry (y/n)? ")
                 if c.lower() not in ["", "y", "yes"]:
                     break
@@ -107,11 +110,12 @@ class SerialConnection:
                 response.append(res)
         return response
 
+
 class Table:
     # TODO grbl
     """
     Interface to the Arduino.
-    
+
     Example
     -------
       >>>
@@ -135,7 +139,7 @@ class Table:
     def get_status(self):
         """ 
         Get the status of the device.
-        
+
         Returns
         -------
         status : string
@@ -150,7 +154,8 @@ class Table:
         TableError :
             if no machine position (MPos) is present in grbl status report.
         """
-        response = self.serial_connection.command("?")[0].strip("<>").split("|")
+        response = self.serial_connection.command(
+            "?")[0].strip("<>").split("|")
         status = response[0]
         position = response[1]
         if position.lower().startswith("mpos"):
@@ -166,9 +171,9 @@ class Table:
         response = self.serial_connection.command("$$")
         for r in response:
             if r.startswith("$100"):
-                var, x_res = r.split("=")
+                _, x_res = r.split("=")
             if r.startswith("$101"):
-                var, y_res = r.split("=")
+                _, y_res = r.split("=")
         return float(x_res), float(y_res)
 
     def get_max_travel(self):
@@ -176,16 +181,16 @@ class Table:
         response = self.serial_connection.command("$$")
         for r in response:
             if r.startswith("$130"):
-                var, x_max = r.split("=")
+                _, x_max = r.split("=")
             if r.startswith("$131"):
-                var, y_max = r.split("=")
+                _, y_max = r.split("=")
         return float(x_max), float(y_max)
 
     def home(self):
         """Start the homing cycle."""
         self.serial_connection.command("$H")
 
-    def move(self, x=0, y=0, mode):
+    def move(self, x, y, mode):
         """
         Moves the table to the desired coordinates.
         Blocks until finished.
@@ -198,7 +203,7 @@ class Table:
         mode : string
             Move in relative or absolute coordinates with ``relative`` or
             ``absolute``
-        
+
         Returns
         -------
         position : tuple of floats
@@ -218,7 +223,7 @@ class Table:
                 time.sleep(0.1)
         return position
 
-    def jog(self, x=0, y=0, f=100, mode='relative'):
+    def jog(self, x=0, y=0, feed=100, mode='relative'):
         """
         Move the table in jogging mode.
         Jogging mode doesn't alter the g-code parser state. So parameters like
@@ -237,27 +242,27 @@ class Table:
             ``absolute``
         """
         self.serial_connection.command("$J={} X{} Y{} F{}".format(
-            self.g_code[mode], x, y, f))
+            self.g_code[mode], x, y, feed))
 
-    def cruize(self, s, f):
+    def cruize(self, s, feed):
         stay = True
         while stay:
             chars = input("'h' 'j' 'k' 'l' to move; 'q' to quit: ")
             for c in chars:
                 num = ""
                 if c.isdigit():
-                    num + = c
+                    num += c
                 elif c in "hjklqs":
                     r = int(num) if num != "" else 1
-                    for i in range(r):
+                    for _ in range(r):
                         if c == "h":
-                            self.jog(x=s, f=f)
+                            self.jog(x=s, feed=feed)
                         elif c == "j":
-                            self.jog(y=-s, f=f)
+                            self.jog(y=-s, feed=feed)
                         elif c == "k":
-                            self.jog(y=s, f=f)
+                            self.jog(y=s, feed=feed)
                         elif c == "l":
-                            self.jog(x=-s, f=f)
+                            self.jog(x=-s, feed=feed)
                         elif c == "q":
                             stay = False
                             break
@@ -266,4 +271,3 @@ class Table:
             pos = self.get_status()[1]
             print("X: {} | Y: {}".format(*pos))
         return pos
-
