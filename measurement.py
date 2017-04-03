@@ -3,6 +3,7 @@ YO
 """
 import controller
 import table
+from helper import query_yes_no
 
 import itertools
 import numpy as np
@@ -179,46 +180,23 @@ class Measurement():
         self.move_to_start()
         if not query_yes_no("Start measurement of background?"):
             print("Abort.")
-            return
+            return self
         self.data['coordinates'], self.data['background'] = self.scan(
             **self.settings)
         print("Done.")
 
-        return self.data
+        return self
 
 
-def query_yes_no(question, default="yes"):
-    """
-    Asks a yes/no question via input() and returns the answer.
-
-    Parameters
-    ----------
-    question : str
-        The string that is presented to the user.
-
-    default : str {"yes", "no"}, optional
-        The presumed answer if the user just hits <Enter>.
-
-    Returns
-    -------
-    answer : bool
-        True for "yes" or False for "no".
-    """
-    valid = {"yes": True, "y": True, "ye": True, "no": False, "n": False}
-    if default is None:
-        prompt = " [y/n] "
-    elif default == "yes":
-        prompt = " [Y/n] "
-    elif default == "no":
-        prompt = " [y/N] "
+def extent(x, y):
+    dx = (x[-1] - x[0]) / (2 * len(x))
+    dy = (y[-1] - y[0]) / (2 * len(y))
+    
+    if dx == 0 and dy == 0:
+        dx, dy = 1, 1
     else:
-        raise ValueError("invalid default answer: '%s'" % default)
-    while True:
-        print(question + prompt, end='')
-        choice = input("--->  ").lower()
-        if default is not None and choice == '':
-            return valid[default]
-        elif choice in valid:
-            return valid[choice]
-        else:
-            print("Please respond with 'yes' or 'no' (or 'y' or 'n').")
+        if dx == 0:
+            dx = dy
+        if dy == 0:
+            dy = dx
+    return (x[0] - dx, x[-1] + dx, y[0] - dy, y[-1] + dy)

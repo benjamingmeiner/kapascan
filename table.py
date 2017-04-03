@@ -19,6 +19,7 @@ the Arduino. All end-user functionality of the interface is implemented in class
 
 import time
 import serial
+from helper import query_yes_no
 
 # TODO push message checking, alarm usw...
 
@@ -67,10 +68,7 @@ class SerialConnection:
                 break
             except serial.SerialException as error:
                 print(error)
-#                print("{} is already in use by another application.".format(
-#                    self.serial_connection.port))
-                c = input("Retry (y/n)? ")
-                if c.lower() not in ["", "y", "yes"]:
+                if not query_yes_no("Retry?"):
                     break
         self.serial_connection.write(b"\n\n")
         time.sleep(0.5)
