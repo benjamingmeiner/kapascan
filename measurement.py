@@ -63,13 +63,6 @@ class Measurement():
         else:
             print("No measurement area set yet.")
 
-    def move_to_center(self):
-        """ Moves to the center (approximately) of the table.""" 
-        self.position = self.table.get_status()[1]
-        x_max, y_max = self.table.get_max_travel()
-        self.table.move(x_max * 0.5, y_max * 0.5, 'absolute')
-        return self.position
-
     def set_area(self, step=0.2, feed=100):
         """
         Mark out the measuring area by manually moving the table to its edge
@@ -160,7 +153,7 @@ class Measurement():
             print("Abort.")
             return
 
-        self.move_to_center()
+        self.move_back()
         if self.settings['area'] is None:
             self.set_area()
         else:
