@@ -73,12 +73,10 @@ class SerialConnection:
         self.serial_connection.write(b"\n\n")
         time.sleep(0.5)
         self.serial_connection.readlines()
-        print("Connected to serial port")
 
     def disconnect(self):
         """Close the serial connection."""
         self.serial_connection.close()
-        print("Disconnected from serial port")
 
     def command(self, com):
         """
@@ -247,16 +245,15 @@ class Table:
             self.g_code[mode], x, y, feed))
 
     def align(self, step, feed):
+        print("'h' 'j' 'k' 'l' to move; 'q' to quit: ")
         stay = True
         while stay:
-            chars = input("'h' 'j' 'k' 'l' to move; "
-                          "'+' '-' to change stepsize; "
-                          "'q' to quit: ")
+            chars = input("--->  ").lower()
             num = ""
             for c in chars:
                 if c.isdigit():
                     num += c
-                elif c in "hjklq+-":
+                elif c in "hjklq":
                     r = int(num) if num != "" else 1
                     num = ""
                     for _ in range(r):
@@ -267,13 +264,7 @@ class Table:
                         elif c == "k":
                             self.jog(y=step, feed=feed)
                         elif c == "l":
-                            self.jog(x=-step, feed=feed)
-                        elif c == "+":
-                            step *= 2
-                            print("New step size: {} mm".format(step))
-                        elif c == "-":
-                            step *= 0.5
-                            print("New step size: {} mm".format(step))
+                            self.jog(x=-step, feed=feed)                          
                         elif c == "q":
                             stay = False
                             break

@@ -90,7 +90,6 @@ class ControlSocket:
         self.control_socket = telnetlib.Telnet()
         try:
             self.control_socket.open(self.host, self.control_port, self.timeout)
-            print("Connected to control port")
         except OSError:
             raise DeviceError("Could not connect to {} on telnet port {}.".format(
                 self.host, self.control_port))
@@ -105,7 +104,6 @@ class ControlSocket:
     def disconnect(self):
         """Close the connection to the telnet socket."""
         self.control_socket.close()
-        print("Disconnected from control port")
 
     def command(self, com):
         """
@@ -232,7 +230,6 @@ class DataSocket:
         self.data_socket.settimeout(self.timeout)
         try:
             self.data_socket.connect((self.host, self.data_port))
-            print("Connected to data port")
         except OSError:
             raise DeviceError("Could not connect to {} on data port {}.".format(
                 self.host, self.data_port))
@@ -240,7 +237,6 @@ class DataSocket:
     def disconnect(self):
         """Close the connection to the data socket."""
         self.data_socket.close()
-        print("Disconnected from data port")
 
     def inspect_header(self, data_stream):
         """
