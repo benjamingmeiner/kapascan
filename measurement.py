@@ -70,8 +70,8 @@ class Measurement():
         sensor getting in the way.
         """
         self.position = self.table.get_status()[1]
-        x_max, y_max = self.table.get_max_travel()
-        self.table.move(x_max - 0.1, y_max - 0.1, 'absolute')
+        max_distance = (md - 0.1 for md in self.table.max_travel)
+        self.table.move(*max_distance, mode='absolute')
         return self.position
 
     def move_back(self):
@@ -128,7 +128,7 @@ class Measurement():
         for value in self.settings.values():
             if not value:
                 raise MeasurementError("Not all parameters have been set yet.")
-        x_res, y_res = self.table.get_resolution()
+        x_res, y_res = self.table.resolution
         # TODO take care of numeric errors
         if (not (x_res * self.settings['x_range'][2]).is_integer() or
                 not (y_res * self.settings['y_range'][2]).is_integer()):

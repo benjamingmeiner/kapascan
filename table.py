@@ -164,14 +164,74 @@ class Table:
         """Disconnect from the serial port."""
         self.serial_connection.disconnect()
 
+    @property
+    def resolution(self):
+        """
+        Get the resolution of each axis in steps/mm.
+        
+        Returns
+        -------
+        x_res, y_res : int
+            The resolution of each axis in steps/mm.
+        """
+        if self._resolution is None:
+            response = self.serial_connection.command("$$")
+            for line in response:
+                if line.startswith("$100"):
+                    _, x_res = line.split("=")
+                if line.startswith("$101"):
+                    _, y_res = line.split("=")
+            self._resolution = (int(x_res), int(y_res))
+        return self._resolution
+
+    @property
+    def max_travel(self):
+        """
+        Get the maximal travel distance of each axis in mm.
+        
+        Returns
+        -------
+        x_max, y_max : float
+            The maximal travel distance of each axis in mm.
+        """
+        if self._max_travel is None:
+            response = self.serial_connection.command("$$")
+            for line in response:
+                if line.startswith("$130"):
+                    _, x_max = line.split("=")
+                if line.startswith("$131"):
+                    _, y_max = line.split("=")
+            self._max_travel = (float(x_max), float(y_max))
+        return self._max_travel
+
+    @property
+    def max_feed(self):
+        """
+        Get the maximal feed of each axis in mm/min.
+        
+        Returns
+        -------
+        feed_x_max, feed_y_max : float
+            The maximal feed of each axis in mm/min.
+        """
+        if self._max_feed is None:
+            response = self.serial_connection.command("$$")
+            for line in response:
+                if line.startswith("$110"):
+                    _, feed_x_max = line.split("=")
+                if line.startswith("$111"):
+                    _, feed_y_max = line.split("=")
+            self._max_feed = (float(feed_x_max), float(feed_y_max))
+        return self._max_feed
+
     def get_status(self):
-        """ 
+        """
         Get the status of the device.
 
         Returns
         -------
         status : string
-            The current state of the machine. Possible values: 
+            The current state of the machine. Possible values:
             Idle, Run, Hold, Jog, Alarm, Door, Check, Home, Sleep
 
         position : tuple of floats
@@ -192,26 +252,6 @@ class Table:
                              "Configure grbl!")
         position = tuple(float(p) for p in position)
         return status, position[0:2]
-
-    def get_resolution(self):
-        """Get the resolution of each axis in steps/mm."""
-        response = self.serial_connection.command("$$")
-        for r in response:
-            if r.startswith("$100"):
-                _, x_res = r.split("=")
-            if r.startswith("$101"):
-                _, y_res = r.split("=")
-        return float(x_res), float(y_res)
-
-    def get_max_travel(self):
-        """Get the maximal travel distance of each axis in mm."""
-        response = self.serial_connection.command("$$")
-        for r in response:
-            if r.startswith("$130"):
-                _, x_max = r.split("=")
-            if r.startswith("$131"):
-                _, y_max = r.split("=")
-        return float(x_max), float(y_max)
 
     def home(self):
         """
