@@ -321,33 +321,3 @@ class Table:
         """
         self.serial_connection.command("$J={} X{} Y{} F{}".format(
             self.g_code[mode], x, y, feed))
-
-    def align(self, step, feed):
-        print("'h' 'j' 'k' 'l' to move; 'q' to quit: ")
-        stay = True
-        while stay:
-            chars = input("--->  ").lower()
-            num = ""
-            for c in chars:
-                if c.isdigit():
-                    num += c
-                elif c in "hjklq":
-                    r = int(num) if num != "" else 1
-                    num = ""
-                    for _ in range(r):
-                        if c == "h":
-                            self.jog(x=step, feed=feed)
-                        elif c == "j":
-                            self.jog(y=-step, feed=feed)
-                        elif c == "k":
-                            self.jog(y=step, feed=feed)
-                        elif c == "l":
-                            self.jog(x=-step, feed=feed)                          
-                        elif c == "q":
-                            stay = False
-                            break
-                else:
-                    print("Not a valid input character: {}".format(c))
-            pos = self.get_status()[1]
-            print("X: {} | Y: {}".format(*pos))
-        return pos
