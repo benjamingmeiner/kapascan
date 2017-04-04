@@ -77,7 +77,7 @@ class Measurement():
     def move_back(self):
         """Moves the table back to the position stored by `move_away()`."""
         if self.position is not None:
-            self.table.move(self.position[0], self.position[1], 'absolute')
+            self.table.move(*self.position, mode='absolute')
         else:
             print("No position to move back to.")
 

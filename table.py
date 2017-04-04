@@ -219,7 +219,7 @@ class Table:
         """
         self.serial_connection.command("$H")
 
-    def move(self, x, y, mode):
+    def move(self, x, y, mode, feed='max'):
         """
         Moves the table to the desired coordinates.
         Blocks until movement is finished.
@@ -229,9 +229,11 @@ class Table:
         x, y : float
             The coordinates to move to
 
-        mode : string
-            Move in relative or absolute coordinates with ``relative`` or
-            ``absolute``
+        feed : float
+            The feed rate in mm/min
+
+        mode : string {'relative', 'absolute'}
+            Move in relative or absolute coordinates.
 
         Returns
         -------
@@ -240,10 +242,16 @@ class Table:
         """
         mode = mode.lower()
         if mode not in Table().g_code.keys():
-            print("Unrecognized move mode!")
-        # TODO add G1 and feed rate
-        self.serial_connection.command("{} X{} Y{}".format(
-            self.g_code[mode], x, y))
+            raise TableError("Invalid move mode.")
+        if feed == 'max':
+            feed = min(self.max_feed)
+        else:
+            try:
+                feed = float(feed)
+            except ValueError:
+                raise TableError("Invalid feed rate.")
+        self.serial_connection.command("G1 {} X{} Y{} F{}".format(
+            self.g_code[mode], x, y, feed))
         while True:
             status, position = self.get_status()
             if status.lower() == "idle":
