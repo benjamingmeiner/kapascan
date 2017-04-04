@@ -220,7 +220,8 @@ class Table:
             if status.lower() == "idle":
                 break
             else:
-                time.sleep(0.1)
+                pass
+                time.sleep(0.05)
         return position
 
     def jog(self, x=0, y=0, feed=100, mode='relative'):
