@@ -171,7 +171,7 @@ class Table:
         
         Returns
         -------
-        x_res, y_res : int
+        x_res, y_res : float
             The resolution of each axis in steps/mm.
         """
         if self._resolution is None:
@@ -181,7 +181,7 @@ class Table:
                     _, x_res = line.split("=")
                 if line.startswith("$101"):
                     _, y_res = line.split("=")
-            self._resolution = (int(x_res), int(y_res))
+            self._resolution = (float(x_res), float(y_res))
         return self._resolution
 
     @property
@@ -242,16 +242,16 @@ class Table:
         TableError :
             if no machine position (MPos) is present in grbl status report.
         """
-        response = self.serial_connection.command("?")[0].strip("<>").split("|")
+        response = self.serial_connection.command("?")[0].lower().strip("<>").split("|")
         status = response[0]
         position = response[1]
-        if position.lower().startswith("mpos"):
-            position = position[5:].split(",")
+        if position.startswith("mpos:"):
+            position = position[5:].split(",")[0:2]
         else:
             raise TableError("No machine position present in status report."
                              "Configure grbl!")
         position = tuple(float(p) for p in position)
-        return status, position[0:2]
+        return status, position
 
     def home(self):
         """
