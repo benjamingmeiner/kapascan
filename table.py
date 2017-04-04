@@ -125,7 +125,7 @@ class SerialConnection:
             if "error" in res or "Alarm" in res:
                 response.append(res)
                 break
-            else:
+            elif res:
                 response.append(res)
         return response
 
@@ -301,6 +301,18 @@ class Table:
                 time.sleep(0.05)
         return position
 
+    def interact(self):
+        print("Interactive Mode:\n"
+              "-----------------\n\n"
+              "(q to quit)")
+        while True:
+            command = input("---> ")
+            if command == 'q':
+                break
+            response = self.serial_connection.command(command)
+            for line in response:
+                print(line)
+
     def jog(self, x=0, y=0, feed=100, mode='relative'):
         """
         Move the table in jogging mode. Jogging mode doesn't alter the g-code
@@ -321,3 +333,5 @@ class Table:
         """
         self.serial_connection.command("$J={} X{} Y{} F{}".format(
             self.g_code[mode], x, y, feed))
+
+    

@@ -59,6 +59,11 @@ class Measurement():
         self.table.disconnect()
         self.controller.disconnect()
 
+    def interactive_mode(self):
+        feed = min(self.table.max_feed)
+        self.table.serial_connection.command("G1 G90 F{}".format(feed))
+        self.table.interact()
+        
     def move_away(self):
         """
         Moves the table to the outermost position. The previous position is
