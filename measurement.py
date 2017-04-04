@@ -112,15 +112,15 @@ class Measurement():
         self.controller.set_trigger_mode('continuous')
         t_start = timer()
         for i, position in enumerate(positions):
-            print("{} of {}  |  ".format(i, length), end='')
+            print("{i: >{width:}} of {length:}  |  ".format(
+                i=i+1, width=len(str(length)), length=length), end='')
             self.table.move(*position, mode='absolute')
             with self.controller.acquisition():
                 z[i] = self.controller.get_data(self.settings['data_points'],
                                                 channels=[0]).mean()
             t_end = timer()
             t_remaining = (length - i) * (t_end - t_start) / (i + 1)
-            remaining_time = datetime.timedelta(seconds=t_remaining)
-            print("remaining: {}".format(remaining_time))
+            print("remaining: {}".format(format_remaining(t_remaining)))
         z = np.transpose(z.reshape((len(x), len(y))))
         return x, y, z
 
@@ -140,7 +140,10 @@ class Measurement():
 def vector(start, stop, step, dtype=np.float):
     return np.arange(start, stop + 0.5 * step, step, dtype=dtype)
     
-    
+def format_remaining(seconds):
+    delta = str(datetime.timedelta(seconds=seconds+0.5))
+    return delta[:-7]
+
 
 #    def measure(self):
 #        """ Starts a guided measurement cycle. """
