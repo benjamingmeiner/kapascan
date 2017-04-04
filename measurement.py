@@ -33,15 +33,12 @@ class Measurement():
         The number of data points to be acquired at each measurement
         position.
     """
-    def __init__(self, host, serial_port, x_range=None, y_range=None,
-                 sampling_time=None, data_points=None):
+    def __init__(self, host, serial_port, **settings):
         self.controller = controller.Controller(host)
         self.table = table.Table(serial_port)
         self.position = None
-        self.settings = dict(x_range=x_range, y_range=y_range,
-                             sampling_time=sampling_time,
-                             data_points=data_points)
-        self.data = dict(coordinates=None, background=None, sample=None)
+        self.settings = settings
+        #self.data = dict(coordinates=None, background=None, sample=None)
 
     def __enter__(self):
         return self.initialize()
@@ -83,13 +80,10 @@ class Measurement():
 
     def move_to_start(self):
         """Moves the table to the starting position of the measurement."""
-        if self.settings['xy_range'] is not None:
-            self.table.move(self.settings['x_range'][0],
-                            self.settings['y_range'][0], mode='absolute')
-        else:
-            print("No measurement area set yet.")
+        self.table.move(self.settings['extent'][0][0],
+                            self.settings['extent'][1][0], mode='absolute')
 
-    def scan(self):
+    def scan(self, mode='absolute'):
         """
         Rasters the measuring area. Halts at every measuring position and
         acquires a certain amount of data points. The mean of this data sample
@@ -103,8 +97,10 @@ class Measurement():
             The acquired data values at the respective coordinates
         """
         self.check_settings()
-        x = vector(*self.settings['x_range'])
-        y = vector(*self.settings['y_range'])
+        if mode not in ('relative', 'absolute'):
+            raise MeasurementError("Invalid argument mode={}".format(mode))
+
+        x, y = self.vectors(mode)
         positions = list(itertools.product(x, y))
         length = len(positions)
         z = np.zeros(length)
@@ -124,21 +120,32 @@ class Measurement():
         z = np.transpose(z.reshape((len(x), len(y))))
         return x, y, z
 
+    def vectors(self, mode):
+        if mode == 'relative':
+            position = self.table.get_status()[1]
+        else:
+            position = (0, 0)
+        vectors = []
+        for range_, offset in zip(self.settings['extent'], position):
+            start, stop, step = range_
+            vector = np.arange(start, stop + 0.5 * step, step, dtype=np.float)
+            vector += offset
+            vectors.append(vector)
+        return vectors
+
     def check_settings(self):
+        # TODO New check for settings dict
         for value in self.settings.values():
             if not value:
                 raise MeasurementError("Not all parameters have been set yet.")
         x_res, y_res = self.table.resolution
         # TODO take care of numeric errors
-        if (not (x_res * self.settings['x_range'][2]).is_integer() or
-                not (y_res * self.settings['y_range'][2]).is_integer()):
+        if (not (x_res * self.settings['extent'][0][2]).is_integer() or
+                not (y_res * self.settings['extent'][1][2]).is_integer()):
             raise MeasurementError("Measurement step size is not a multiple of "
                 "motor step size! Stepper resolution is [steps/mm] "
                 "X: {}  Y: {}".format(x_res, y_res))
 
-
-def vector(start, stop, step, dtype=np.float):
-    return np.arange(start, stop + 0.5 * step, step, dtype=dtype)
 
 def format_remaining(seconds):
     delta = str(datetime.timedelta(seconds=seconds+0.5))
