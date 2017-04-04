@@ -171,7 +171,7 @@ class DataSocket:
     -----
     As soon as the data socket is established (via method ``connect``) data
     acquisition is started. Available data is transmitted immediatelye. If
-    the controoler is set to trigger mode "continuous", data will be available
+    the controller is set to trigger mode "continuous", data will be available
     with the sampling frequency. If the controller is set to one of the other
     trigger modes, data will be available not until a signal is present at the
     trigger input, or the command "GDM" is sent over the control port.

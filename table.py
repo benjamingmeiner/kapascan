@@ -1,6 +1,7 @@
 """
-This module provides an easy to use interface for grbl that allows basic table
-movements.
+This module provides an easy to use interface for the movement of the table.
+The control of the stepper motors is done by grbl, which is an Arduino firmware,
+originally intended for CNC milling motion control.
 
 Class listing
 -------------
@@ -15,13 +16,20 @@ The control of the table is performed via the class methods of ``Table``. The
 class ``SerialConnection`` provides the low-level access to the serial port of
 the Arduino. All end-user functionality of the interface is implemented in class
 ``Table``, though.
+
+Example
+-------
+  >>> table = Table('COM3')
+  >>> table.connect()
+  >>> table.home()  # starts the homing cycle
+  >>> table.move(x=3, y=4, mode='absolute', feed='max')
+  >>> table.disconnect()
 """
+# TODO push message checking, alarm usw...
 
 import time
 import serial
 from helper import query_yes_no
-
-# TODO push message checking, alarm usw...
 
 
 class TableError(Exception):
@@ -31,22 +39,32 @@ class TableError(Exception):
 
 class SerialConnection:
     """
-    Interface to the serial port of the Arduino UNO running grbl.
+    Interface to the serial port of the Arduino running grbl.
 
     An overview of all command that are understood by grbl can be found in the
     grbl wiki at https://github.com/gnea/grbl/wiki.
 
+    Grbl settings
+    -------------
+    
+
     Parameters
     ----------
-    port : string
+    serial_port : string
         The serial port on the host, e.g. 'COM3'.
     baudrate : int, optional
         The baudrate of the connection. As of grbl v1.1 this defaults to 115200
     timeout : int, optional
         The time in seconds that is waited when receiving input via readline()
         or readlines() methods.
+    
+    Example
+    -------
+    serial_connection = SerialConnection('COM3')
+    serial_connection.connect()
+    response = serial_connection.command("?")
+    serial_connection.disconnect()
     """
-
     def __init__(self, serial_port, baudrate=115200, timeout=1):
         self.serial_connection = serial.Serial()
         self.serial_connection.port = serial_port
@@ -86,7 +104,7 @@ class SerialConnection:
         Parameters
         ----------
         com : string
-            The command to be sent without trailing newline or carriage return 
+            The command to be sent without trailing newline or carriage return
             character.
 
         Returns
@@ -113,21 +131,30 @@ class SerialConnection:
 
 
 class Table:
-    # TODO grbl
     """
-    Interface to the Arduino.
+    Main interface for the usage of the table.
+
+    Coordinate system
+    -----------------
+    Grbl is configured such that, in the top view on the table, the origin is at
+    the lower left corner, with x pointing to the right and y pointing upwards.
 
     Example
     -------
-      >>>
-      >>>
-      >>>
+      >>> table = Table('COM3')
+      >>> table.connect()
+      >>> table.home()  # starts the homing cycle
+      >>> table.move(x=3, y=4, mode='absolute', feed='max')
+      >>> table.disconnect()
     """
     g_code = {'relative': 'G91',
               'absolute': 'G90'}
 
     def __init__(self, serial_port='COM3', baudrate=115200):
         self.serial_connection = SerialConnection(serial_port, baudrate)
+        self._max_travel = None
+        self._max_feed = None
+        self._resolution = None
 
     def connect(self):
         """Connect to the serial port of the Arduino."""
@@ -187,13 +214,15 @@ class Table:
         return float(x_max), float(y_max)
 
     def home(self):
-        """Start the homing cycle."""
+        """
+        Starts the homing cycle. Blocks until finished.
+        """
         self.serial_connection.command("$H")
 
     def move(self, x, y, mode):
         """
         Moves the table to the desired coordinates.
-        Blocks until finished.
+        Blocks until movement is finished.
 
         Parameters
         ----------
@@ -207,7 +236,7 @@ class Table:
         Returns
         -------
         position : tuple of floats
-            the machine position after the movement
+            The machine position after the movement.
         """
         mode = mode.lower()
         if mode not in Table().g_code.keys():
@@ -226,16 +255,16 @@ class Table:
 
     def jog(self, x=0, y=0, feed=100, mode='relative'):
         """
-        Move the table in jogging mode.
-        Jogging mode doesn't alter the g-code parser state. So parameters like
-        feed rate or movement mode don't have to be reset after jogging.
+        Move the table in jogging mode. Jogging mode doesn't alter the g-code
+        parser state. So parameters like feed rate or movement mode don't have
+        to be reset after jogging. Does not block.
 
         Parameters
         ----------
         x, y : float
             The coordinates to move to
 
-        f : float
+        feed : float
             The feed rate in mm/min
 
         mode : string, optional

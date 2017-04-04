@@ -136,10 +136,10 @@ class Measurement():
                 "motor step size! Stepper resolution is [steps/mm] "
                 "X: {}  Y: {}".format(x_res, y_res))
 
-        
+
 def vector(start, stop, step, dtype=np.float):
     return np.arange(start, stop + 0.5 * step, step, dtype=dtype)
-    
+
 def format_remaining(seconds):
     delta = str(datetime.timedelta(seconds=seconds+0.5))
     return delta[:-7]
