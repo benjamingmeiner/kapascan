@@ -87,7 +87,7 @@ class SerialConnection:
             except serial.SerialException as error:
                 print(error)
                 if not query_yes_no("Retry?"):
-                    break
+                    raise NotConnectedError
         self.serial_connection.write(b"\n\n")
         time.sleep(0.5)
         self.serial_connection.readlines()

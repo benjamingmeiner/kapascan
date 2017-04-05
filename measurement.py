@@ -13,6 +13,14 @@ import datetime
 class MeasurementError(Exception):
     pass
 
+class InvalidSettingError(MeasurementError):
+    pass
+
+class MissingSettingError(MeasurementError):
+    pass
+
+class NotOnGridError(MeasurementError):
+    pass
 
 class Measurement():
     """
@@ -33,12 +41,18 @@ class Measurement():
         The number of data points to be acquired at each measurement
         position.
     """
-    def __init__(self, host, serial_port, **settings):
+    def __init__(self, host, serial_port, settings):
         self.controller = controller.Controller(host)
         self.table = table.Table(serial_port)
         self.position = None
+        valid_keys = {'sampling_time', 'data_points', 'extent'}
+        missing_keys = valid_keys - settings.keys()
+        invalid_keys =  settings.keys() - valid_keys
+        if invalid_keys:
+            raise InvalidSettingError(str(invalid_keys))
+        if missing_keys:
+            raise MissingSettingError(str(missing_keys))
         self.settings = settings
-        #self.data = dict(coordinates=None, background=None, sample=None)
 
     def __enter__(self):
         return self.initialize()
@@ -47,9 +61,12 @@ class Measurement():
         self.stop()
 
     def initialize(self):
+        # TODO make sure __exit__ gets called if exception is raised here
+        # http://stackoverflow.com/questions/13074847/catching-exception-in-context-manager-enter
         self.controller.connect()
         self.controller.check_status()
         self.table.connect()
+        self.check_resolution()
         status = self.table.get_status()[0]
         if status.lower() == 'alarm':
             self.table.home()
@@ -138,18 +155,13 @@ class Measurement():
             vectors.append(vector)
         return vectors
 
-    def check_settings(self):
-        # TODO New check for settings dict
-        for value in self.settings.values():
-            if not value:
-                raise MeasurementError("Not all parameters have been set yet.")
-        x_res, y_res = self.table.resolution
-        # TODO take care of numeric errors
-        if (not (x_res * self.settings['extent'][0][2]).is_integer() or
-                not (y_res * self.settings['extent'][1][2]).is_integer()):
-            raise MeasurementError("Measurement step size is not a multiple of "
-                "motor step size! Stepper resolution is [steps/mm] "
-                "X: {}  Y: {}".format(x_res, y_res))
+    def check_resolution(self):
+        resolution = self.table.resolution
+        for res, extent in zip(resolution, self.settings['extent']):
+            for value in extent:
+                if not round((res * value), 8).is_integer():
+                    raise NotOnGridError("extent value: {} mm; ".format(value) +
+                        "stepper resolution: {} per mm".format(res))
 
 
 def format_remaining(seconds):
