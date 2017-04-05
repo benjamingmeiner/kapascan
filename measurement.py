@@ -62,7 +62,7 @@ class Measurement():
     def interactive_mode(self):
         feed = min(self.table.max_feed)
         self.table.serial_connection.command("G1 G90 F{}".format(feed))
-        self.table.interact()
+        return self.table.interact()
         
     def move_away(self):
         """

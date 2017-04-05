@@ -302,13 +302,21 @@ class Table:
         return position
 
     def interact(self):
+        print()
         print("Interactive Mode:\n"
-              "-----------------\n\n"
+              "=================\n\n"
               "(q to quit)")
+        history = []
         while True:
             command = input("---> ")
             if command == 'q':
-                break
+                return self.get_status()[1]
+            if command.startswith('.'):
+                if set(command) == {'.'}:
+                    i = command.count('.')
+                command = history[-i]
+                print("---> " + command)
+            history.append(command)
             response = self.serial_connection.command(command)
             for line in response:
                 print(line)
