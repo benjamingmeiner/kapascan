@@ -36,6 +36,12 @@ class TableError(Exception):
     """Simple exception class used for all errors in this module."""
     pass
 
+class NotConnectedError(TableError):
+    pass
+
+class TimeOutError(TableError):
+    pass
+
 
 class SerialConnection:
     """
@@ -117,16 +123,18 @@ class SerialConnection:
         # TODO Make this stable!!!
         self.serial_connection.write(com.encode('ascii') + b"\n")
         response = []
+        start = time.time()
         while True:
             res = self.serial_connection.readline()
             res = res.decode('ascii').strip("\r\n")
             if "ok" in res:
                 break
-            if "error" in res or "Alarm" in res:
+            if res != '':
                 response.append(res)
+            if "error" in res or "ALARM" in res:
                 break
-            elif res:
-                response.append(res)
+            if time.time() - start > 30:
+                raise TimeOutError("The device did not answer for 30 seconds.")
         return response
 
 
