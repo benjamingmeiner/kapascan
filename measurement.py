@@ -69,6 +69,7 @@ class Measurement():
         self.check_resolution()
         status = self.table.get_status()[0]
         if status.lower() == 'alarm':
+            print("Homing ...")
             self.table.home()
         return self
 
@@ -80,7 +81,7 @@ class Measurement():
         feed = min(self.table.max_feed)
         self.table.serial_connection.command("G1 G90 F{}".format(feed))
         return self.table.interact()
-        
+
     def move_away(self):
         """
         Moves the table to the outermost position. The previous position is
@@ -111,6 +112,10 @@ class Measurement():
         acquires a certain amount of data points. The mean of this data sample
         is used as the data value at this position.
 
+        Parameters
+        ----------
+        mode : str {'absolute', 'relative'}
+
         Returns
         -------
         x, y : 1D-array
@@ -118,9 +123,10 @@ class Measurement():
         z : 2D-arrary
             The acquired data values at the respective coordinates
         """
-        self.check_settings()
         if mode not in ('relative', 'absolute'):
             raise MeasurementError("Invalid argument mode={}".format(mode))
+        # TODO check if extent in accord with max travel, maybe via grbl checker, "$C"?
+
 
         x, y = self.vectors(mode)
         positions = list(itertools.product(x, y))
