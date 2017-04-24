@@ -35,7 +35,30 @@ from helper import query_yes_no
 class TableError(Exception):
     """Simple exception class used for all errors in this module."""
 
+
+class ResetError(TableError):
+    """Raised if grbl soft reset is unsuccessful."""
+
+
+class UnlockError(TableError):
+    """Raised if grbl unlock is unsuccessful."""
+
+
+class NotConnectedError(TableError):
+    """Raised if Connection to grbl is unsuccessful."""
+
+
+class TimeOutError(TableError):
+    """Raised if timout occurs on grbl status query."""
+
+
 class GrblError(TableError):
+    """Mapping from grbl error codes to the corresponding error messages."""
+
+    def __init__(self, i):
+        super().__init__("Error {}: {}".format(i, self.error_message[i]))
+        self.i = i
+
     error_message = {
         '1': "G-code words consist of a letter and a value. Letter was not found.",
         '2': "Numeric value format is not valid or missing an expected value.",
@@ -70,14 +93,16 @@ class GrblError(TableError):
         '34': "A G2 or G3 arc, traced with the radius definition, had a mathematical error when computing the arc geometry. Try either breaking up the arc into semi-circles or quadrants, or redefine them with the arc offset definition.",
         '35': "A G2 or G3 arc, traced with the offset definition, is missing the IJK offset word in the selected plane to trace the arc.",
         '36': "There are unused, leftover G-code words that aren't used by any command in the block.",
-        '37': "The G43.1 dynamic tool length offset command cannot apply an offset to an axis other than its configured axis. The Grbl default axis is the Z-axis.",
-        }
+        '37': "The G43.1 dynamic tool length offset command cannot apply an offset to an axis other than its configured axis. The Grbl default axis is the Z-axis."}
 
-    def __init__(self, nr):
-        super().__init__("Error {}: {}".format(nr, self.error_message[nr]))
-        self.nr = nr
 
 class GrblAlarm(TableError):
+    """Mapping from grbl alarm codes to the corresponding error messages."""
+
+    def __init__(self, i):
+        super().__init__("ALARM {}: {}".format(i, self.alarm_message[i]))
+        self.i = i
+
     alarm_message = {
         '1': "Hard limit triggered. Machine position is likely lost due to sudden and immediate halt. Re-homing is highly recommended.",
         '2': "G-code motion target exceeds machine travel. Machine position safely retained. Alarm may be unlocked.",
@@ -87,21 +112,11 @@ class GrblAlarm(TableError):
         '6': "Homing fail. Reset during active homing cycle.",
         '7': "Homing fail. Safety door was opened during active homing cycle.",
         '8': "Homing fail. Cycle failed to clear limit switch when pulling off. Try increasing pull-off setting or check wiring.",
-        '9': "Homing fail. Could not find limit switch within search distance. Defined as 1.5 * max_travel on search and 5 * pulloff on locate phases.",
-        }
-
-    def __init__(self, nr):
-        super().__init__("ALARM {}: {}".format(nr, self.alarm_message[nr]))
-        self.nr = nr
-
-class NotConnectedError(TableError):
-    pass
-
-class TimeOutError(TableError):
-    pass
+        '9': "Homing fail. Could not find limit switch within search distance. Defined as 1.5 * max_travel on search and 5 * pulloff on locate phases."}
 
 
 class SerialConnection:
+    # TODO paste grbl settings
     """
     Interface to the serial port of the Arduino running grbl.
 
@@ -139,12 +154,13 @@ class SerialConnection:
 
     def connect(self):
         """
-        Open the serial connection.
+        Opens the serial connection.
         The serial port cannot be used by another application at the same time.
         """
         # TODO check response from first readlines. (alarm?, welcome message,
         #      nothing?)
         # TODO check what can be read if device in alarm mode (nothing!)
+        # TODO: distiguish alam state from homing? githubissue?
         while True:
             try:
                 self.serial_connection.open()
@@ -158,12 +174,12 @@ class SerialConnection:
         self.serial_connection.readlines()
 
     def disconnect(self):
-        """Close the serial connection."""
+        """Closes the serial connection."""
         self.serial_connection.close()
 
     def command(self, com):
         """
-        Send a command over the serial connection and return the response of
+        Sends a command over the serial connection and return the response of
         the device.
 
         Parameters
@@ -191,12 +207,12 @@ class SerialConnection:
             if res != '':
                 response.append(res)
             if "error:" in res:
-                nr = res.strip("error:")
-                raise GrblError(nr)
+                i = res.strip("error:")
+                raise GrblError(i)
             if "ALARM:" in res:
                 self.serial_connection.readlines()
-                nr = res.strip("ALARM:")
-                raise GrblAlarm(nr)
+                i = res.strip("ALARM:")
+                raise GrblAlarm(i)
             if time.time() - start > 30:
                 raise TimeOutError("The device did not answer for 30 seconds.")
         return response
@@ -229,27 +245,43 @@ class Table:
         self._resolution = None
 
     def connect(self):
-        """Connect to the serial port of the Arduino."""
+        """Connects to the serial port of the Arduino."""
         self.serial_connection.connect()
 
     def disconnect(self):
-        """Disconnect from the serial port."""
+        """Disconnects from the serial port."""
         self.serial_connection.disconnect()
 
     def reset(self):
+        """
+        Initiates a soft reset.
+
+        Raises
+        ------
+        ResetError :
+            If reset is not successul.
+        """
         self.serial_connection.serial_connection.write(b"r")
         response = self.serial_connection.serial_connection.readlines()
         if b"Grbl 1.1f ['$' for help]\r\n" in response:
             print("Reset.")
         else:
-            raise ResetFail
+            raise ResetError
 
     def unlock(self):
+        """
+        Unlocks the grbl for movements.
+
+        Raises
+        ------
+        UnlockError :
+            If unlock is not successful.
+        """
         response = self.serial_connection.command("$X")
         if '[MSG:Caution: Unlocked]' in response:
             print("Unlocked.")
         else:
-            raise UnlockFail
+            raise UnlockError
 
     @property
     def resolution(self):
@@ -329,7 +361,8 @@ class Table:
         TableError :
             if no machine position (MPos) is present in grbl status report.
         """
-        response = self.serial_connection.command("?")[0].lower().strip("<>").split("|")
+        response = self.serial_connection.command(
+            "?")[0].lower().strip("<>").split("|")
         status = response[0]
         position = response[1]
         if position.startswith("mpos:"):
@@ -359,7 +392,7 @@ class Table:
         feed : float
             The feed rate in mm/min
 
-        mode : string {'relative', 'absolute'}
+        mode : str {'relative', 'absolute'}
             Move in relative or absolute coordinates.
 
         Returns
@@ -372,23 +405,21 @@ class Table:
             raise TableError("Invalid move mode.")
         if feed == 'max':
             feed = min(self.max_feed)
-        else:
-            try:
-                feed = float(feed)
-            except ValueError:
-                raise TableError("Invalid feed rate.")
         self.serial_connection.command("G1 {} X{} Y{} F{}".format(
-                self.g_code[mode], x, y, feed))
+            self.g_code[mode], x, y, feed))
         while True:
             status, position = self.get_status()
             if status.lower() == "idle":
                 break
             else:
-                pass
                 time.sleep(0.05)
         return position
 
     def interact(self):
+        """
+        Starts the interactive mode, where the user can directly communicate
+        with grbl.
+        """
         print()
         print("Interactive Mode:\n"
               "=================\n\n"
@@ -413,7 +444,7 @@ class Table:
             except GrblError as error:
                 print(error)
             except GrblAlarm as error:
-                if error.nr == '2':
+                if error.i == '2':
                     print(error)
                     if query_yes_no("Unlock?"):
                         self.reset()
@@ -422,7 +453,6 @@ class Table:
                         print("Staying in ALARM state ...")
                 else:
                     raise
-
 
     def jog(self, x=0, y=0, feed=100, mode='relative'):
         """
@@ -444,4 +474,3 @@ class Table:
         """
         self.serial_connection.command("$J={} X{} Y{} F{}".format(
             self.g_code[mode], x, y, feed))
-

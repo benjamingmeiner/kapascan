@@ -378,8 +378,9 @@ class Controller:
         """
         sampling_time = int(sampling_time * 1000)
         response = self.control_socket.command("STI{}".format(sampling_time))
-        actual_time = response.strip(",")
-        print("Set sampling time: {} ms".format(float(actual_time) / 1000))
+        actual_time = int(response.strip(","))
+        if actual_time != sampling_time:
+            print("Set sampling time: {} ms".format(actual_time / 1000))
         return actual_time
 
     def set_trigger_mode(self, mode):
