@@ -70,8 +70,8 @@ class Measurement():
       >>>
     """
 
-    def __init__(self, host, serial_port, settings):
-        self._controller = controller.Controller(host)
+    def __init__(self, sensor, host, serial_port, settings):
+        self._controller = controller.Controller(sensor, host)
         self._table = table.Table(serial_port)
         self.settings = settings
         valid_keys = {'sampling_time', 'data_points', 'extent', 'mode'}

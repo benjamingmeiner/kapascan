@@ -32,21 +32,24 @@ import time
 import socket
 import struct
 import telnetlib
-from sensor import Sensor
+from sensor import SENSORS
 import numpy as np
 from contextlib import contextmanager
 
 # TODO check all IO for exceptions that can be raised
-# TODO use proper sensor class
+
 
 class ControllerError(Exception):
     """Simple exception class used for all errors in this module."""
 
+
 class UnknownCommandError(ControllerError):
     """Raise when an unknown command is sent to controller."""
 
+
 class WrongParameterError(ControllerError):
     """Raise when a command with a wrong parameter is sent to the controller."""
+
 
 class ControlSocket:
     """
@@ -72,6 +75,7 @@ class ControlSocket:
       >>> print(control_socket.command("VER"))
       >>> control_socket.disconnect()
     """
+
     def __init__(self, host, control_port=23, timeout=3):
         self.host = host
         self.control_port = control_port
@@ -144,7 +148,8 @@ class ControlSocket:
                 raise UnknownCommandError(com)
             elif response == "$WRONG PARAMETER":
                 raise WrongParameterError(com)
-        raise ControllerError("Unexpected response from device: {}".format(response))
+        raise ControllerError(
+            "Unexpected response from device: {}".format(response))
 
 
 class DataSocket:
@@ -210,6 +215,7 @@ class DataSocket:
     ...               ...         ...
     ================ ============ =============================================
     """
+
     def __init__(self, host, data_port=10001, timeout=3):
         self.host = host
         self.data_port = data_port
@@ -308,12 +314,13 @@ class DataSocket:
             payload = data_stream[32:32 + payload_size]
             for i in range(nr_of_frames):
                 if received_points < data_points:
-                    frame = payload[i*bytes_per_frame:(i+1)*bytes_per_frame]
+                    frame = payload[i * bytes_per_frame:
+                                    (i + 1) * bytes_per_frame]
                     data[received_points] = np.frombuffer(frame, dtype)[channels]
                     received_points += 1
                 else:
                     break
-            data_stream = data_stream[32+payload_size:]
+            data_stream = data_stream[32 + payload_size:]
         if len(channels) == 1:
             return data.T[0]
         else:
@@ -326,8 +333,8 @@ class Controller:
 
     Parameters
     ----------
-    sensor : class Sensor
-        A Sensor class as defined in sensor.py.
+    sensor : str
+        The serial number of the sensor as defined in sensor.py.
     host : str
         The hosts IP address
     control_port : int, optional
@@ -337,15 +344,15 @@ class Controller:
 
     Example
     -------
-      >>> controller = Controller('192.168.254.173')
+      >>> controller = Controller('2011', '192.168.254.173')
       >>> controller.connect()
       >>> with controller.acquisition(mode="continuous", sampling_time=50):
       >>>    controller.get_data(data_points=100, channels=(0,1))
       >>> controller.disconnect()
     """
-    def __init__(self, host, control_port=23, data_port=10001, 
-                 sensor=Sensor('1234')):
-        self.sensor = sensor
+
+    def __init__(self, sensor, host, control_port=23, data_port=10001):
+        self.sensor = SENSORS[sensor]
         self.control_socket = ControlSocket(host, control_port)
         self.data_socket = DataSocket(host, data_port)
         self.status_response = None
@@ -394,7 +401,7 @@ class Controller:
         """
         trg_nr = {"continuous": 0, "rising_edge": 1,
                   "high_level": 2, "gate_rising_edge": 3}
-        response = self.control_socket.command("TRG{}".format(trg_nr[mode]))
+        self.control_socket.command("TRG{}".format(trg_nr[mode]))
 
     def check_status(self):
         """
@@ -435,7 +442,7 @@ class Controller:
 
     def scale(self, data):
         """Scale the acquired data to the measuring range of the sensor."""
-        return data / 0xffffff * self.sensor.range
+        return data / 0xffffff * self.sensor['range']
 
     @contextmanager
     def acquisition(self, mode=None, sampling_time=None):
@@ -459,4 +466,3 @@ class Controller:
             yield
         finally:
             self.data_socket.disconnect()
-
