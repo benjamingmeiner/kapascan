@@ -23,6 +23,7 @@ import itertools
 import numpy as np
 from timeit import default_timer as timer
 import datetime
+import sys
 
 
 class MeasurementError(Exception):
@@ -35,10 +36,6 @@ class InvalidSettingError(MeasurementError):
 
 class MissingSettingError(MeasurementError):
     """Raised if a settings keyword is missing."""
-
-
-class NotOnGridError(MeasurementError):
-    """Raised if specified scanning grid is not in accord with motor step size."""
 
 
 class Measurement():
@@ -57,7 +54,8 @@ class Measurement():
         The serial port of the Arduino running grbl.
     settings : dict with keys 'sampling_time', 'data_points', 'extent', 'mode'
         ``extent`` : tuple {((x0, x1, delta_x), (y0, y1, delta_y))
-            hjkl
+            The coordinates of the boundary points of the measuring area
+            (x0, x1, y0, y1) and the step size of each axis (delta_x, delta_y)
         ``sampling_time`` : float
             The desired sampling time in ms.
         ``data_points`` : int
@@ -75,7 +73,7 @@ class Measurement():
     def __init__(self, host, serial_port, settings):
         self._controller = controller.Controller(host)
         self._table = table.Table(serial_port)
-        self._saved_pos = None
+        self.settings = settings
         valid_keys = {'sampling_time', 'data_points', 'extent', 'mode'}
         missing_keys = valid_keys - settings.keys()
         invalid_keys = settings.keys() - valid_keys
@@ -83,10 +81,14 @@ class Measurement():
             raise InvalidSettingError(str(invalid_keys))
         if missing_keys:
             raise MissingSettingError(str(missing_keys))
-        self.settings = settings
+        self._saved_pos = None
 
     def __enter__(self):
-        return self.initialize()
+        try:
+            return self.initialize()
+        except Exception as error:
+            self.__exit__(*sys.exc_info())
+            raise error
 
     def __exit__(self, *args):
         self.stop()
@@ -96,12 +98,10 @@ class Measurement():
         Establishes all connections to the devices and performs some start up
         checks and a homing cycle if the current position is not known to grbl.
         """
-        # TODO make sure __exit__ gets called if exception is raised here
-        # http://stackoverflow.com/questions/13074847/catching-exception-in-context-manager-enter
         self._controller.connect()
         self._controller.check_status()
         self._table.connect()
-        self._check_table_resolution()
+        self._table.check_resolution(self.settings['extent'])
         status = self._table.get_status()[0]
         if status.lower() == 'alarm':
             print("Homing ...")
@@ -204,24 +204,6 @@ class Measurement():
             vec += offset
             vectors.append(vec)
         return vectors
-
-    def _check_table_resolution(self):
-        """
-        Checks if the grid points of the specified measuring area (setting 
-        ``extent``) lie on the stepper motor grid.
-
-        Raises
-        ------
-        NotOnGridError :
-            If specified scanning grid is not in accord with motor step size.
-        """
-        resolution = self._table.resolution
-        for res, extent in zip(resolution, self.settings['extent']):
-            for value in extent:
-                if not round((res * value), 8).is_integer():
-                    message = ("extent value: {} mm; ".format(value) +
-                               "stepper resolution: {} per mm".format(res))
-                    raise NotOnGridError(message)
 
 
 def format_remaining(seconds):

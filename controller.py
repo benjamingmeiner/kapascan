@@ -39,13 +39,13 @@ from contextlib import contextmanager
 # TODO check all IO for exceptions that can be raised
 # TODO use proper sensor class
 
-class DeviceError(Exception):
+class ControllerError(Exception):
     """Simple exception class used for all errors in this module."""
 
-class UnknownCommandError(DeviceError):
+class UnknownCommandError(ControllerError):
     """Raise when an unknown command is sent to controller."""
 
-class WrongParameterError(DeviceError):
+class WrongParameterError(ControllerError):
     """Raise when a command with a wrong parameter is sent to the controller."""
 
 class ControlSocket:
@@ -91,14 +91,14 @@ class ControlSocket:
         try:
             self.control_socket.open(self.host, self.control_port, self.timeout)
         except OSError:
-            raise DeviceError("Could not connect to {} on telnet port {}.".format(
+            raise ControllerError("Could not connect to {} on telnet port {}.".format(
                 self.host, self.control_port))
         time.sleep(0.1)
         try:
             while self.control_socket.read_eager():
                 pass
         except EOFError:
-            raise DeviceError("Connection to {} closed unexpectedly.".format(
+            raise ControllerError("Connection to {} closed unexpectedly.".format(
                 self.host))
 
     def disconnect(self):
@@ -134,7 +134,7 @@ class ControlSocket:
             response = self.control_socket.read_eager()
             response = response.decode('ascii').strip("\r\n")
         except (OSError, EOFError):
-            raise DeviceError("Could not execute command {}".format(com))
+            raise ControllerError("Could not execute command {}".format(com))
 
         if response.startswith("$" + com):
             response = response[len(com) + 1:]
@@ -144,7 +144,7 @@ class ControlSocket:
                 raise UnknownCommandError(com)
             elif response == "$WRONG PARAMETER":
                 raise WrongParameterError(com)
-        raise DeviceError("Unexpected response from device: {}".format(response))
+        raise ControllerError("Unexpected response from device: {}".format(response))
 
 
 class DataSocket:
@@ -231,7 +231,7 @@ class DataSocket:
         try:
             self.data_socket.connect((self.host, self.data_port))
         except OSError:
-            raise DeviceError("Could not connect to {} on data port {}.".format(
+            raise ControllerError("Could not connect to {} on data port {}.".format(
                 self.host, self.data_port))
 
     def disconnect(self):
@@ -301,7 +301,7 @@ class DataSocket:
 #                raise DeviceError("Missed frames!")
             payload_size = bytes_per_frame * nr_of_frames
             if max(channels) + 1 > nr_of_channels:
-                raise DeviceError("Device has only {} channels.".format(
+                raise ControllerError("Device has only {} channels.".format(
                     nr_of_channels))
             while len(data_stream) < 32 + payload_size:
                 data_stream += self.data_socket.recv(65536)

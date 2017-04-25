@@ -6,7 +6,7 @@ originally intended for CNC milling motion control.
 Class listing
 -------------
 SerialConnection :
-    An interface to the serial port of the Arduino.
+    An interface to the serial port of the Arduino running grbl.
 Table :
     Main interface for the control of the table.
 
@@ -50,6 +50,10 @@ class NotConnectedError(TableError):
 
 class TimeOutError(TableError):
     """Raised if timout occurs on grbl status query."""
+
+
+class NotOnGridError(TableError):
+    """Raised if specified scanning grid is not in accord with motor step size."""
 
 
 class GrblError(TableError):
@@ -116,16 +120,17 @@ class GrblAlarm(TableError):
 
 
 class SerialConnection:
-    # TODO paste grbl settings
     """
     Interface to the serial port of the Arduino running grbl.
 
     An overview of all command that are understood by grbl can be found in the
-    grbl wiki at https://github.com/gnea/grbl/wiki.
+    grbl wiki at ``https://github.com/gnea/grbl/wiki``.
 
     Grbl settings
     -------------
-    This is a listing of the recommended grbl settings::
+    This is a listing of the recommended grbl settings. See 
+    ``https://github.com/gnea/grbl/wiki/Grbl-v1.1-Interface`` for the complete 
+    documentation of the grbl interface::
 
     $0=100
     $1=0
@@ -488,6 +493,30 @@ class Table:
                         print("Staying in ALARM state ...")
                 else:
                     raise
+
+    def check_resolution(self, extent):
+        """
+        Checks if the grid points of the measuring area lie on the stepper motor
+        grid.
+
+        Parameters
+        ----------
+        extent : tuple {((x0, x1, delta_x), (y0, y1, delta_y))
+            The coordinates of the boundary points of the measuring area
+            (x0, x1, y0, y1) and the step size of each axis (delta_x, delta_y)
+
+        Raises
+        ------
+        NotOnGridError :
+            If specified scanning grid is not in accord with motor step size.
+        """
+        resolution = self.resolution
+        for res, ext in zip(resolution, extent):
+            for value in ext:
+                if not round((res * value), 8).is_integer():
+                    message = ("extent value: {} mm; ".format(value) +
+                               "motor resolution: {} steps per mm".format(res))
+                    raise NotOnGridError(message)
 
     def jog(self, x=0, y=0, feed=100, mode='relative'):
         """
