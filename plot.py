@@ -136,6 +136,8 @@ class _ProfileBuilder(object):
     def on_press(self, event):
         if event.inaxes != self.ax:
             return
+        if event.button != 2:
+            return
         self.src = event.xdata, event.ydata
         self.pressed = True
         self.line, = self.ax.plot(self.src[0], self.src[1], color=(0.7, 0.1, 0))
@@ -150,7 +152,9 @@ class _ProfileBuilder(object):
         self.fig.canvas.draw()
         
     def on_release(self, event):
-        self.pressed = False
+        if not self.pressed:
+            return
         if event.xdata != None and event.ydata != None:
             self.dst = event.xdata, event.ydata
             _plot_profile(self.x, self.y, self.z, self.src, self.dst)
+        self.pressed = False
