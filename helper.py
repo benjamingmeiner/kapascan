@@ -1,3 +1,6 @@
+"""helper functions, not fitting into the other modules."""
+
+
 def query_yes_no(question, default="yes"):
     """
     Asks a yes/no question via input() and returns the answer.

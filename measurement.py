@@ -41,11 +41,11 @@ class MissingSettingError(MeasurementError):
 class Measurement():
     """
     Blah Bli Blub
-    
+
     Notes
     -----
     Context Manager
-    
+
     Parameters
     ----------
     host : str
@@ -62,7 +62,7 @@ class Measurement():
             The number of data points to be acquired at each measuremet position.
         ``mode`` : str {'absolute', 'relative'}
             Sets the measuring area in relative or absolute coordinates.
-    
+
     Example
     -------
       >>>
@@ -112,12 +112,12 @@ class Measurement():
         """Disconencts from all devices."""
         self._table.disconnect()
         self._controller.disconnect()
-    
+
     @property
     def position(self):
         """Returns the current position."""
         return self._table.get_status()[1]
-    
+
     def interactive_mode(self):
         """Starts the table's interactive mode."""
         feed = min(self._table.max_feed)
@@ -145,7 +145,7 @@ class Measurement():
     def move_to_start(self):
         """Moves the table to the starting position of the measurement."""
         self._table.move(self.settings['extent'][0][0],
-                        self.settings['extent'][1][0], mode='absolute')
+                         self.settings['extent'][1][0], mode='absolute')
 
     def scan(self):
         """
@@ -176,7 +176,7 @@ class Measurement():
             self._table.move(*position, mode='absolute')
             with self._controller.acquisition():
                 z[i] = self._controller.get_data(self.settings['data_points'],
-                                                channels=[0]).mean()
+                                                 channels=[0]).mean()
             t_end = timer()
             t_remaining = (length - i) * (t_end - t_start) / (i + 1)
             print("remaining: {}".format(format_remaining(t_remaining)))

@@ -1,7 +1,9 @@
 """
 This module provides an easy to use interface for the movement of the table.
 The control of the stepper motors is done by grbl, which is an Arduino firmware,
-originally intended for CNC milling motion control.
+originally intended for CNC milling motion control. The grbl project is located
+at https://github.com/gnea/grbl/ with a very good wiki at
+https://github.com/gnea/grbl/wiki.
 
 Class listing
 -------------
@@ -24,6 +26,55 @@ Example
   >>> table.home()  # starts the homing cycle
   >>> table.move(x=3, y=4, mode='absolute', feed='max')
   >>> table.disconnect()
+
+grbl Settings
+-------------
+There have been made some minor changes to the grbl (compile-time) configuration
+(see file config.h in grbl source code):
+ - The homing cycle routine is adapted to match the setup (no Z-axis)
+ - The coordinate system is configured such that, in the top view on the table,
+   the origin is at the lower left corner, with x pointing to the right and y
+   pointing upwards.
+ - The soft-reset character has been changed from ``Ctrl-X`` to ``r``.
+
+This is a listing of the recommended grbl (runtime) settings. See
+https://github.com/gnea/grbl/wiki/Grbl-v1.1-Interface for the complete
+documentation of the grbl interface::
+
+$0=100
+$1=0
+$2=0
+$3=3
+$4=0
+$5=0
+$6=0
+$10=1
+$11=0.010
+$12=0.002
+$13=0
+$20=1
+$21=1
+$22=1
+$23=3
+$24=25.000
+$25=150.000
+$26=15
+$27=1.000
+$30=1000
+$31=0
+$32=0
+$100=1600.000
+$101=1600.000
+$102=200.000
+$110=350.000
+$111=350.000
+$112=0.000
+$120=8.000
+$121=8.000
+$122=0.000
+$130=47.000
+$131=47.000
+$132=0.000
 """
 # TODO push message checking, alarm usw...
 
@@ -49,7 +100,7 @@ class NotConnectedError(TableError):
 
 
 class TimeOutError(TableError):
-    """Raised if timout occurs on grbl status query."""
+    """Raised if timeout occurs on grbl status query."""
 
 
 class NotOnGridError(TableError):
@@ -123,50 +174,6 @@ class SerialConnection:
     """
     Interface to the serial port of the Arduino running grbl.
 
-    An overview of all command that are understood by grbl can be found in the
-    grbl wiki at ``https://github.com/gnea/grbl/wiki``.
-
-    Grbl settings
-    -------------
-    This is a listing of the recommended grbl settings. See 
-    ``https://github.com/gnea/grbl/wiki/Grbl-v1.1-Interface`` for the complete 
-    documentation of the grbl interface::
-
-    $0=100
-    $1=0
-    $2=0
-    $3=3
-    $4=0
-    $5=0
-    $6=0
-    $10=1
-    $11=0.010
-    $12=0.002
-    $13=0
-    $20=1
-    $21=1
-    $22=1
-    $23=3
-    $24=25.000
-    $25=150.000
-    $26=15
-    $27=1.000
-    $30=1000
-    $31=0
-    $32=0
-    $100=1600.000
-    $101=1600.000
-    $102=200.000
-    $110=350.000
-    $111=350.000
-    $112=0.000
-    $120=8.000
-    $121=8.000
-    $122=0.000
-    $130=47.000
-    $131=47.000
-    $132=0.000
-
     Parameters
     ----------
     serial_port : string
@@ -219,8 +226,9 @@ class SerialConnection:
 
     def command(self, com):
         """
-        Sends a command over the serial connection and return the response of
-        the device.
+        Sends a command to grbl over the serial connection and returns the
+        response. The acknowledgement message 'ok' sent by grbl after each
+        command is not returned by this function.
 
         Parameters
         ----------
@@ -232,6 +240,11 @@ class SerialConnection:
         -------
         response : list
             list of each line responded from the device.
+
+        Raises
+        ------
+        GrblError, GrblAlarm :
+            If grbl returns an error or an alarm.
         """
         # TODO handle other response messages than "ok and error"
         # TODO handle errors (and alarms?)
@@ -264,8 +277,9 @@ class Table:
 
     Coordinate system
     -----------------
-    Grbl is configured such that, in the top view on the table, the origin is at
-    the lower left corner, with x pointing to the right and y pointing upwards.
+    The coordinate system configured such that, in the top view on the table,
+    the origin is at the lower left corner, with x pointing to the right and y
+    pointing upwards.
 
     Example
     -------
@@ -285,7 +299,7 @@ class Table:
         self._resolution = None
 
     def connect(self):
-        """Connects to the serial port of the Arduino."""
+        """Connects to the serial port of the Arduino running grbl."""
         self.serial_connection.connect()
 
     def disconnect(self):
@@ -294,7 +308,7 @@ class Table:
 
     def reset(self):
         """
-        Initiates a soft reset.
+        Initiates a soft-reset.
 
         Raises
         ------
@@ -522,7 +536,8 @@ class Table:
         """
         Move the table in jogging mode. Jogging mode doesn't alter the g-code
         parser state. So parameters like feed rate or movement mode don't have
-        to be reset after jogging. Does not block.
+        to be reset after jogging. Does *not* block until the movement is
+        finished.
 
         Parameters
         ----------
