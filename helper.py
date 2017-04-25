@@ -36,3 +36,20 @@ def query_yes_no(question, default="yes"):
             return valid[choice]
         else:
             print("Please respond with 'yes' or 'no' (or 'y' or 'n').")
+
+
+def query_options(options):
+    prompts = ["[{}] {}".format(i + 1, line) for i, line in enumerate(options)]
+    for line in prompts:
+        print(line)
+    while True:
+        choice = input("--->  ")
+        try:
+            number = int(choice)
+        except ValueError:
+            print("Please enter an interger in range 1-{}!".format(len(options)))
+            continue
+        if 0 < number < len(options) + 1:
+            return number
+        else:
+            print("Please enter an interger in range 1-{}!".format(len(options)))

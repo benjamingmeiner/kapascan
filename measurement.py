@@ -86,7 +86,7 @@ class Measurement():
     def __enter__(self):
         try:
             return self.initialize()
-        except Exception as error:
+        except BaseException as error:
             self.__exit__(*sys.exc_info())
             raise error
 
@@ -100,12 +100,12 @@ class Measurement():
         """
         self._controller.connect()
         self._controller.check_status()
-        self._table.connect()
-        self._table.check_resolution(self.settings['extent'])
-        status = self._table.get_status()[0]
+        status = self._table.connect()
         if status.lower() == 'alarm':
             print("Homing ...")
             self._table.home()
+        self._table.check_resolution(self.settings['extent'])
+
         return self
 
     def stop(self):

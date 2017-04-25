@@ -80,7 +80,7 @@ $132=0.000
 
 import time
 import serial
-from helper import query_yes_no
+from helper import query_yes_no, query_options
 
 
 class TableError(Exception):
@@ -206,7 +206,6 @@ class SerialConnection:
         """
         # TODO check response from first readlines. (alarm?, welcome message,
         #      nothing?)
-        # TODO check what can be read if device in alarm mode (nothing!)
         # TODO: distiguish alam state from homing? githubissue?
         while True:
             try:
@@ -224,7 +223,7 @@ class SerialConnection:
         """Closes the serial connection."""
         self.serial_connection.close()
 
-    def command(self, com):
+    def command(self, com, timeout=30):
         """
         Sends a command to grbl over the serial connection and returns the
         response. The acknowledgement message 'ok' sent by grbl after each
@@ -246,9 +245,6 @@ class SerialConnection:
         GrblError, GrblAlarm :
             If grbl returns an error or an alarm.
         """
-        # TODO handle other response messages than "ok and error"
-        # TODO handle errors (and alarms?)
-        # TODO Make this stable!!!
         self.serial_connection.write(com.encode('ascii') + b"\n")
         response = []
         start = time.time()
@@ -266,8 +262,9 @@ class SerialConnection:
                 self.serial_connection.readlines()
                 i = res.strip("ALARM:")
                 raise GrblAlarm(i)
-            if time.time() - start > 30:
-                raise TimeOutError("The device did not answer for 30 seconds.")
+            if time.time() - start > timeout:
+                raise TimeOutError(
+                    "The device did not answer for {} seconds.".format(timeout))
         return response
 
 
@@ -301,6 +298,35 @@ class Table:
     def connect(self):
         """Connects to the serial port of the Arduino running grbl."""
         self.serial_connection.connect()
+        response = self.serial_connection.serial_connection.read_all()
+        if response:
+            print("Grbl messages present:")
+            for line in response:
+                print(line)
+        while True:
+            if self.is_alive() is True:
+                self.serial_connection.serial_connection.read_all()
+                return self.get_status()[0]
+            else:
+                print("Grbl doesn't answer. Possible reasons could be:")
+                print("  -- grbl is in an alarm state.")
+                print("  -- grbl is too busy. (homing cycle, maybe?)")
+                print("What do you want to do?\n")
+                option = query_options(["Do a soft-reset.",
+                                        "Retry. Grbl isn't busy any more."])
+                if option == 1:
+                    self.reset()
+                elif option == 2:
+                    pass
+
+    def is_alive(self):
+        self.serial_connection.serial_connection.read_all()
+        try:
+            self.serial_connection.command('', timeout=2)
+        except TimeOutError as error:
+            return False
+        else:
+            return True
 
     def disconnect(self):
         """Disconnects from the serial port."""
@@ -324,7 +350,7 @@ class Table:
 
     def unlock(self):
         """
-        Unlocks the grbl for movements.
+        Unlocks grbl for movements.
 
         Raises
         ------
