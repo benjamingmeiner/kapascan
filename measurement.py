@@ -73,9 +73,9 @@ class Measurement():
     """
 
     def __init__(self, host, serial_port, settings):
-        self.controller = controller.Controller(host)
-        self.table = table.Table(serial_port)
-        self.position = None
+        self._controller = controller.Controller(host)
+        self._table = table.Table(serial_port)
+        self._saved_pos = None
         valid_keys = {'sampling_time', 'data_points', 'extent', 'mode'}
         missing_keys = valid_keys - settings.keys()
         invalid_keys = settings.keys() - valid_keys
@@ -98,26 +98,31 @@ class Measurement():
         """
         # TODO make sure __exit__ gets called if exception is raised here
         # http://stackoverflow.com/questions/13074847/catching-exception-in-context-manager-enter
-        self.controller.connect()
-        self.controller.check_status()
-        self.table.connect()
-        self.check_table_resolution()
-        status = self.table.get_status()[0]
+        self._controller.connect()
+        self._controller.check_status()
+        self._table.connect()
+        self._check_table_resolution()
+        status = self._table.get_status()[0]
         if status.lower() == 'alarm':
             print("Homing ...")
-            self.table.home()
+            self._table.home()
         return self
 
     def stop(self):
         """Disconencts from all devices."""
-        self.table.disconnect()
-        self.controller.disconnect()
-
+        self._table.disconnect()
+        self._controller.disconnect()
+    
+    @property
+    def position(self):
+        """Returns the current position."""
+        return self._table.get_status()[1]
+    
     def interactive_mode(self):
         """Starts the table's interactive mode."""
-        feed = min(self.table.max_feed)
-        self.table.serial_connection.command("G1 G90 F{}".format(feed))
-        return self.table.interact()
+        feed = min(self._table.max_feed)
+        self._table.serial_connection.command("G1 G90 F{}".format(feed))
+        return self._table.interact()
 
     def move_away(self):
         """
@@ -126,21 +131,20 @@ class Measurement():
         This function is useful to place the sample on the table without the
         sensor getting in the way.
         """
-        self.position = self.table.get_status()[1]
-        max_distance = (md - 0.1 for md in self.table.max_travel)
-        self.table.move(*max_distance, mode='absolute')
-        return self.position
+        self._saved_pos = self._table.get_status()[1]
+        max_distance = (md - 0.1 for md in self._table.max_travel)
+        self._table.move(*max_distance, mode='absolute')
 
     def move_back(self):
         """Moves the table back to the position stored by `move_away()`."""
-        if self.position is not None:
-            self.table.move(*self.position, mode='absolute')
+        if self._saved_pos is not None:
+            self._table.move(*self._saved_pos, mode='absolute')
         else:
             print("No position to move back to.")
 
     def move_to_start(self):
         """Moves the table to the starting position of the measurement."""
-        self.table.move(self.settings['extent'][0][0],
+        self._table.move(self.settings['extent'][0][0],
                         self.settings['extent'][1][0], mode='absolute')
 
     def scan(self):
@@ -159,19 +163,19 @@ class Measurement():
         # TODO check if extent in accord with max travel, maybe via grbl
         # checker, "$C"?
 
-        x, y = self.vectors()
+        x, y = self._vectors()
         positions = list(itertools.product(x, y))
         length = len(positions)
         z = np.zeros(length)
-        self.controller.set_sampling_time(self.settings['sampling_time'])
-        self.controller.set_trigger_mode('continuous')
+        self._controller.set_sampling_time(self.settings['sampling_time'])
+        self._controller.set_trigger_mode('continuous')
         t_start = timer()
         for i, position in enumerate(positions):
             print("{i: >{width:}} of {length:}  |  ".format(
                 i=i + 1, width=len(str(length)), length=length), end='')
-            self.table.move(*position, mode='absolute')
-            with self.controller.acquisition():
-                z[i] = self.controller.get_data(self.settings['data_points'],
+            self._table.move(*position, mode='absolute')
+            with self._controller.acquisition():
+                z[i] = self._controller.get_data(self.settings['data_points'],
                                                 channels=[0]).mean()
             t_end = timer()
             t_remaining = (length - i) * (t_end - t_start) / (i + 1)
@@ -179,7 +183,7 @@ class Measurement():
         z = np.transpose(z.reshape((len(x), len(y))))
         return x, y, z
 
-    def vectors(self):
+    def _vectors(self):
         """
         Generates arrays with all x and y values of the measuring area (setting
         ``extent``).
@@ -190,18 +194,18 @@ class Measurement():
             A list of arrays with all the x and y values, respectively.
         """
         if self.settings['mode'] == 'relative':
-            position = self.table.get_status()[1]
+            position = self._table.get_status()[1]
         else:
             position = (0, 0)
-        vecs = []
+        vectors = []
         for range_, offset in zip(self.settings['extent'], position):
             start, stop, step = range_
             vec = np.arange(start, stop + 0.5 * step, step, dtype=np.float)
             vec += offset
-            vecs.append(vec)
-        return vecs
+            vectors.append(vec)
+        return vectors
 
-    def check_table_resolution(self):
+    def _check_table_resolution(self):
         """
         Checks if the grid points of the specified measuring area (setting 
         ``extent``) lie on the stepper motor grid.
@@ -211,7 +215,7 @@ class Measurement():
         NotOnGridError :
             If specified scanning grid is not in accord with motor step size.
         """
-        resolution = self.table.resolution
+        resolution = self._table.resolution
         for res, extent in zip(resolution, self.settings['extent']):
             for value in extent:
                 if not round((res * value), 8).is_integer():
