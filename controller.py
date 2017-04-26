@@ -15,13 +15,13 @@ Notes
 -----
 Data acquisition and control of various parameters of the controller is
 performed via the class methods of ``Controller``. The classes ``ControlSocket``
-and ``DataSocket`` provide the low-level access to the control and data port of the
-device. All end-user functionality of the interface is implemented in class
+and ``DataSocket`` provide the low-level access to the control and data port of
+the device. All end-user functionality of the interface is implemented in class
 ``Controller``, though.
 
 Example
 -------
-  >>> controller = Controller('192.168.254.173')
+  >>> controller = Controller('2011', '192.168.254.173')
   >>> controller.connect()
   >>> with controller.acquisition(mode="continuous", sampling_time=50):
   >>>    controller.get_data(data_points=100, channels=(0,1))
@@ -32,19 +32,24 @@ import time
 import socket
 import struct
 import telnetlib
-from sensor import Sensor
+from sensor import SENSORS
 import numpy as np
 from contextlib import contextmanager
 
 # TODO check all IO for exceptions that can be raised
-# TODO handle exceptions properly and at the right place; to the user
-# TODO check measurement frame counter
-# TODO use proper sensor class
-# TODO use proper default values of function arguments
+# TODO check status responses from device for errors
+# TODO use frame counter
 
-class DeviceError(Exception):
+class ControllerError(Exception):
     """Simple exception class used for all errors in this module."""
-    pass
+
+
+class UnknownCommandError(ControllerError):
+    """Raise when an unknown command is sent to controller."""
+
+
+class WrongParameterError(ControllerError):
+    """Raise when a command with a wrong parameter is sent to the controller."""
 
 
 class ControlSocket:
@@ -71,7 +76,8 @@ class ControlSocket:
       >>> print(control_socket.command("VER"))
       >>> control_socket.disconnect()
     """
-    def __init__(self, host, control_port=23, timeout=5):
+
+    def __init__(self, host, control_port=23, timeout=3):
         self.host = host
         self.control_port = control_port
         self.timeout = timeout
@@ -89,22 +95,20 @@ class ControlSocket:
         self.control_socket = telnetlib.Telnet()
         try:
             self.control_socket.open(self.host, self.control_port, self.timeout)
-            print("Connected to control port")
         except OSError:
-            raise DeviceError("Could not connect to {} on telnet port {}.".format(
+            raise ControllerError("Could not connect to {} on telnet port {}.".format(
                 self.host, self.control_port))
         time.sleep(0.1)
         try:
             while self.control_socket.read_eager():
                 pass
         except EOFError:
-            raise DeviceError("Connection to {} closed unexpectedly.".format(
+            raise ControllerError("Connection to {} closed unexpectedly.".format(
                 self.host))
 
     def disconnect(self):
         """Close the connection to the telnet socket."""
         self.control_socket.close()
-        print("Disconnected from control port")
 
     def command(self, com):
         """
@@ -135,17 +139,18 @@ class ControlSocket:
             response = self.control_socket.read_eager()
             response = response.decode('ascii').strip("\r\n")
         except (OSError, EOFError):
-            raise DeviceError("Could not execute command {}".format(com))
+            raise ControllerError("Could not execute command {}".format(com))
 
         if response.startswith("$" + com):
             response = response[len(com) + 1:]
             if response.endswith("OK"):
                 return response[:-2]
             elif response == "$UNKNOWN COMMAND":
-                raise DeviceError("Unknown command: {}".format(com))
+                raise UnknownCommandError(com)
             elif response == "$WRONG PARAMETER":
-                raise DeviceError("Wrong parameter in command {}".format(com))
-        raise DeviceError("Unexpected response from device: {}".format(response))
+                raise WrongParameterError(com)
+        raise ControllerError(
+            "Unexpected response from device: {}".format(response))
 
 
 class DataSocket:
@@ -172,7 +177,7 @@ class DataSocket:
     -----
     As soon as the data socket is established (via method ``connect``) data
     acquisition is started. Available data is transmitted immediatelye. If
-    the controoler is set to trigger mode "continuous", data will be available
+    the controller is set to trigger mode "continuous", data will be available
     with the sampling frequency. If the controller is set to one of the other
     trigger modes, data will be available not until a signal is present at the
     trigger input, or the command "GDM" is sent over the control port.
@@ -211,7 +216,8 @@ class DataSocket:
     ...               ...         ...
     ================ ============ =============================================
     """
-    def __init__(self, host, data_port=10001, timeout=5):
+
+    def __init__(self, host, data_port=10001, timeout=3):
         self.host = host
         self.data_port = data_port
         self.timeout = timeout
@@ -231,15 +237,13 @@ class DataSocket:
         self.data_socket.settimeout(self.timeout)
         try:
             self.data_socket.connect((self.host, self.data_port))
-            print("Connected to data port")
         except OSError:
-            raise DeviceError("Could not connect to {} on data port {}.".format(
+            raise ControllerError("Could not connect to {} on data port {}.".format(
                 self.host, self.data_port))
 
     def disconnect(self):
         """Close the connection to the data socket."""
         self.data_socket.close()
-        print("Disconnected from data port")
 
     def inspect_header(self, data_stream):
         """
@@ -260,19 +264,19 @@ class DataSocket:
         nr_of_channels = '{0:064b}'.format(channel_field).count('1')
         nr_of_frames = header[6]
         bytes_per_frame = header[5]
-        payload_size = bytes_per_frame * nr_of_frames
-        return nr_of_channels, nr_of_frames, bytes_per_frame, payload_size
+        frame_counter = header[7]
+        return nr_of_channels, nr_of_frames, bytes_per_frame, frame_counter
 
-    def get_data(self, data_points=1, channels=(0, 1)):
+    def get_data(self, data_points, channels):
         """
         Get measurement data from the controller.
 
         Parameters
         ----------
-        data_points : int, optional
-            Number of data points to be received.
-        channels : array_like, optional
-            A tuple of the channels to get the data from.
+        data_points : int
+            The number of data points to be received.
+        channels : list of ints
+            A list of the channels to get the data from.
 
         Returns
         -------
@@ -284,33 +288,40 @@ class DataSocket:
             If the number of requested channels is larger than the actual
             channel number.
         """
+        channels = list(channels)
         data_stream = b''
-        data_type = np.dtype(int).newbyteorder('<')
-        data = np.zeros((data_points, len(channels)), data_type)
-        received_data_points = 0
-        while received_data_points < data_points:
+        dtype = np.dtype(int).newbyteorder('<')
+        data = np.zeros((data_points, len(channels)), dtype)
+        received_points = 0
+        while received_points < data_points:
             while len(data_stream) < 32:
                 try:
                     data_stream += self.data_socket.recv(65536)
                 except socket.timeout:
                     print("ERROR: No data available.")
                     return data
-            nr_of_channels, nr_of_frames, bytes_per_frame, payload_size = \
+            nr_of_channels, nr_of_frames, bytes_per_frame, frame_counter = \
                 self.inspect_header(data_stream)
+#            if received_points != frame_counter - 1:
+#                print(received_points)
+#                print(frame_counter)
+#                raise DeviceError("Missed frames!")
+            payload_size = bytes_per_frame * nr_of_frames
             if max(channels) + 1 > nr_of_channels:
-                raise DeviceError("Device has only {} channels.".format(
+                raise ControllerError("Device has only {} channels.".format(
                     nr_of_channels))
             while len(data_stream) < 32 + payload_size:
                 data_stream += self.data_socket.recv(65536)
             payload = data_stream[32:32 + payload_size]
             for i in range(nr_of_frames):
-                if received_data_points < data_points:
-                    data[received_data_points] = np.frombuffer(
-                        payload[i*bytes_per_frame:(i+1)*bytes_per_frame], data_type)[list(channels)]
-                    received_data_points += 1
+                if received_points < data_points:
+                    frame = payload[i * bytes_per_frame:
+                                    (i + 1) * bytes_per_frame]
+                    data[received_points] = np.frombuffer(frame, dtype)[channels]
+                    received_points += 1
                 else:
                     break
-            data_stream = data_stream[32+payload_size:]
+            data_stream = data_stream[32 + payload_size:]
         if len(channels) == 1:
             return data.T[0]
         else:
@@ -323,8 +334,8 @@ class Controller:
 
     Parameters
     ----------
-    sensor : class Sensor
-        A Sensor class as defined in sensor.py.
+    sensor : str
+        The serial number of the sensor as defined in sensor.py.
     host : str
         The hosts IP address
     control_port : int, optional
@@ -334,15 +345,15 @@ class Controller:
 
     Example
     -------
-      >>> controller = Controller('192.168.254.173')
+      >>> controller = Controller('2011', '192.168.254.173')
       >>> controller.connect()
       >>> with controller.acquisition(mode="continuous", sampling_time=50):
       >>>    controller.get_data(data_points=100, channels=(0,1))
       >>> controller.disconnect()
     """
-    def __init__(self, host='192.168.254.173', control_port=23,
-                 data_port=10001, sensor=Sensor('1234')):
-        self.sensor = sensor
+
+    def __init__(self, sensor, host, control_port=23, data_port=10001):
+        self.sensor = SENSORS[sensor]
         self.control_socket = ControlSocket(host, control_port)
         self.data_socket = DataSocket(host, data_port)
         self.status_response = None
@@ -373,31 +384,25 @@ class Controller:
         actual_time : float
             The actual sampling time.
         """
-        try:
-            sampling_time = int(sampling_time * 1000)
-            response = self.control_socket.command("STI{}".format(sampling_time))
-        except DeviceError as error:
-            print(error)
-        else:
-            actual_time = response.strip(",")
-            print("Set sampling time: {} ms".format(float(actual_time) / 1000))
-            return actual_time
+        sampling_time = int(sampling_time * 1000)
+        response = self.control_socket.command("STI{}".format(sampling_time))
+        actual_time = int(response.strip(","))
+        if actual_time != sampling_time:
+            print("Set sampling time: {} ms".format(actual_time / 1000))
+        return actual_time
 
-    def set_trigger_mode(self, mode="continuous"):
+    def set_trigger_mode(self, mode):
         """
         Set the trigger mode.
 
         Parameters
         ----------
-        mode : str
-            possible options are ``continuous``, ``rising_edge``, ``high_level``
-            and ``gate_rising_edge``. See manual for an explanation of the modes.
+        mode : str {'continuous', 'rising_edge', 'high_level', 'gate_rising_edge'}
+            See manual for an explanation of the modes.
         """
-        trg_nr = {"continuous": 0, "rising_edge": 1, "high_level": 2, "gate_rising_edge": 3}
-        try:
-            response = self.control_socket.command("TRG{}".format(trg_nr[mode]))
-        except DeviceError as error:
-            print(error)
+        trg_nr = {"continuous": 0, "rising_edge": 1,
+                  "high_level": 2, "gate_rising_edge": 3}
+        self.control_socket.command("TRG{}".format(trg_nr[mode]))
 
     def check_status(self):
         """
@@ -407,20 +412,17 @@ class Controller:
         previous status that was saved as an attribute. It prints out a warning
         if the status changed between to subsequent calls.
         """
-        try:
-            response1 = self.control_socket.command("STS")
-            response2 = self.control_socket.command("LIN?")
-            status_response = response1 + ";LIN" + response2
-        except DeviceError as error:
-            print(error)
-        else:
-            if self.status_response is not None:
-                status_new = status_response.split(';')
-                status_old = self.status_response.split(';')
-                for new, old in zip(status_new, status_old):
-                    if new != old:
-                        print("WARNING: Changed parameter: {} to {}.".format(old, new))
-            self.status_response = status_response
+        response1 = self.control_socket.command("STS")
+        response2 = self.control_socket.command("LIN?")
+        status_response = response1 + ";LIN" + response2
+        if self.status_response is not None:
+            status_new = status_response.split(';')
+            status_old = self.status_response.split(';')
+            for new, old in zip(status_new, status_old):
+                if new != old:
+                    print("WARNING: "
+                          "Changed parameter: {} to {}.".format(old, new))
+        self.status_response = status_response
 
     def trigger(self):
         """ Trigger a single measurement."""
@@ -434,26 +436,34 @@ class Controller:
         ----------
         data_points : int, optional
             number of data points to be measured (per channel).
-        sampling_time : float, optional
-            Desired sampling time in ms. If omitted, do not attempt to change
-            the sampling time.
-        channels : array_like, optional
-            A tuple of the channels to get the data from.
+        channels : list of ints, optional
+            A list of the channels to get the data from.
         """
         return self.scale(self.data_socket.get_data(data_points, channels))
 
     def scale(self, data):
         """Scale the acquired data to the measuring range of the sensor."""
-        return data / 0xffffff * self.sensor.range
+        return data / 0xffffff * self.sensor['range']
 
     @contextmanager
-    def acquisition(self, mode="rising_edge", sampling_time=0):
+    def acquisition(self, mode=None, sampling_time=None):
+        """
+        Start the actual data acquisition by connecting to the data socket.
+
+        Parameters
+        ----------
+        mode : str {'continuous', 'rising_edge', 'high_level', 'gate_rising_edge'}
+            The trigger mode.
+        sampling_time : float
+            The desired sampling time in ms. The controller automatically
+            chooses the closest possible sampling time.
+        """
         try:
-            self.set_sampling_time(sampling_time)
-            self.set_trigger_mode(mode)
+            if mode:
+                self.set_trigger_mode(mode)
+            if sampling_time:
+                self.set_sampling_time(sampling_time)
             self.data_socket.connect()
             yield
-        except DeviceError as error:
-            print(error)
         finally:
             self.data_socket.disconnect()
