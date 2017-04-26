@@ -1,4 +1,6 @@
-"""helper functions, not fitting into the other modules."""
+"""
+Helper functions, not fitting into the other modules.
+"""
 
 
 def query_yes_no(question, default="yes"):

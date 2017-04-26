@@ -76,7 +76,8 @@ $130=47.000
 $131=47.000
 $132=0.000
 """
-# TODO push message checking, alarm usw...
+# TODO push message checking usw ...
+# TODO check for exceptions that can be raised
 
 import time
 import serial
@@ -204,9 +205,6 @@ class SerialConnection:
         Opens the serial connection.
         The serial port cannot be used by another application at the same time.
         """
-        # TODO check response from first readlines. (alarm?, welcome message,
-        #      nothing?)
-        # TODO: distiguish alam state from homing? githubissue?
         while True:
             try:
                 self.serial_connection.open()
@@ -313,11 +311,14 @@ class Table:
                 print("  -- grbl is too busy. (homing cycle, maybe?)")
                 print("What do you want to do?\n")
                 option = query_options(["Do a soft-reset.",
-                                        "Retry. Grbl isn't busy any more."])
+                                        "Retry.",
+                                        "Abort."])
                 if option == 1:
                     self.reset()
                 elif option == 2:
                     pass
+                elif option == 3:
+                    raise NotConnectedError
 
     def is_alive(self):
         self.serial_connection.serial_connection.read_all()
@@ -363,65 +364,55 @@ class Table:
         else:
             raise UnlockError
 
+
+    def _get_property(self, ids):
+        response = self.serial_connection.command("$$")
+        for line in response:
+            if line.startswith("${}".format(ids[0])):
+                _, x_prop = line.split("=")
+            if line.startswith("${}".format(ids[1])):
+                _, y_prop = line.split("=")
+        return (float(x_prop), float(y_prop))
+
+
     @property
     def resolution(self):
         """
-        Get the resolution of each axis in steps/mm.
+        Property resolution
 
         Returns
         -------
         x_res, y_res : float
             The resolution of each axis in steps/mm.
         """
-        if self._resolution is None:
-            response = self.serial_connection.command("$$")
-            for line in response:
-                if line.startswith("$100"):
-                    _, x_res = line.split("=")
-                if line.startswith("$101"):
-                    _, y_res = line.split("=")
-            self._resolution = (float(x_res), float(y_res))
-        return self._resolution
+        return self._get_property([100, 101])
+
 
     @property
     def max_travel(self):
         """
-        Get the maximal travel distance of each axis in mm.
+        Property max_travel
 
         Returns
         -------
         x_max, y_max : float
             The maximal travel distance of each axis in mm.
         """
-        if self._max_travel is None:
-            response = self.serial_connection.command("$$")
-            for line in response:
-                if line.startswith("$130"):
-                    _, x_max = line.split("=")
-                if line.startswith("$131"):
-                    _, y_max = line.split("=")
-            self._max_travel = (float(x_max), float(y_max))
-        return self._max_travel
+        return self._get_property([130, 131])
+
 
     @property
     def max_feed(self):
         """
-        Get the maximal feed of each axis in mm/min.
+        Property max_feed
 
         Returns
         -------
         feed_x_max, feed_y_max : float
             The maximal feed of each axis in mm/min.
         """
-        if self._max_feed is None:
-            response = self.serial_connection.command("$$")
-            for line in response:
-                if line.startswith("$110"):
-                    _, feed_x_max = line.split("=")
-                if line.startswith("$111"):
-                    _, feed_y_max = line.split("=")
-            self._max_feed = (float(feed_x_max), float(feed_y_max))
-        return self._max_feed
+        return self._get_property([110, 111])
+
 
     def get_status(self):
         """
@@ -441,10 +432,10 @@ class Table:
         TableError :
             if no machine position (MPos) is present in grbl status report.
         """
-        response = self.serial_connection.command(
-            "?")[0].lower().strip("<>").split("|")
-        status = response[0]
-        position = response[1]
+        response = self.serial_connection.command("?")[0]
+        response_fields = response.lower().strip("<>").split("|")
+        status = response_fields[0]
+        position = response_fields[1]
         if position.startswith("mpos:"):
             position = position[5:].split(",")[0:2]
         else:

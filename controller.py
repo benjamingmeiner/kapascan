@@ -38,6 +38,7 @@ from contextlib import contextmanager
 
 # TODO check all IO for exceptions that can be raised
 # TODO check status responses from device for errors
+# TODO use frame counter
 
 class ControllerError(Exception):
     """Simple exception class used for all errors in this module."""
@@ -301,7 +302,6 @@ class DataSocket:
                     return data
             nr_of_channels, nr_of_frames, bytes_per_frame, frame_counter = \
                 self.inspect_header(data_stream)
-            # TODO use frame counter
 #            if received_points != frame_counter - 1:
 #                print(received_points)
 #                print(frame_counter)
