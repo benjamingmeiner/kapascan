@@ -4,7 +4,7 @@ single interface suited for raster measurements.
 
 Class listing
 -------------
-Measuremtent :
+Measurement :
     bla
 
 Notes
@@ -30,14 +30,6 @@ class MeasurementError(Exception):
     """Simple exception class used for all errors in this module."""
 
 
-class InvalidSettingError(MeasurementError):
-    """Raised if invalid settings keyword is passed to Measurement."""
-
-
-class MissingSettingError(MeasurementError):
-    """Raised if a settings keyword is missing."""
-
-
 class Measurement():
     """
     Blah Bli Blub
@@ -52,16 +44,29 @@ class Measurement():
         The IP address of the controller.
     serial_port : str
         The serial port of the Arduino running grbl.
-    settings : dict with keys 'sampling_time', 'data_points', 'extent', 'mode'
+    settings : dict with keys:
         ``extent`` : tuple {((x0, x1, delta_x), (y0, y1, delta_y))
             The coordinates of the boundary points of the measuring area
             (x0, x1, y0, y1) and the step size of each axis (delta_x, delta_y)
-        ``sampling_time`` : float
-            The desired sampling time in ms.
-        ``data_points`` : int
-            The number of data points to be acquired at each measuremet position.
-        ``mode`` : str {'absolute', 'relative'}
+        ``sampling_time`` : float, optional
+            The desired sampling time in ms. Defaults to 0.256 ms.
+        ``data_points`` : int, optional
+            The number of data points to be acquired at each measurement
+            position. Defaults to 100.
+        ``mode`` : str {'absolute', 'relative'}, optional
             Sets the measuring area in relative or absolute coordinates.
+            Defaults to 'absolute'.
+        ``direction`` : tuple of str, optional
+            Specifies the order and the direction in which the axes are moved.
+            Defaults to ('x', 'y'). The two elements of the tuple set the
+            'primary' and 'secondary'axis, where the primary axis is the axis
+            that determines the principal scanning direction.
+            Possible keys for the axis specification are 'x' and 'y', optionally
+            prefixed with a sign the sets the direction, e.g. ('-y', 'x') for a
+            scan in negative y-direction, starting at the minimal x value.
+        ``change_direction`` : bool, optional
+            Changes the primary scanning direction after each line. Defaults to
+            True.
 
     Example
     -------
@@ -73,14 +78,19 @@ class Measurement():
     def __init__(self, sensor, host, serial_port, settings):
         self._controller = controller.Controller(sensor, host)
         self._table = table.Table(serial_port)
-        self.settings = settings
-        valid_keys = {'sampling_time', 'data_points', 'extent', 'mode'}
-        missing_keys = valid_keys - settings.keys()
-        invalid_keys = settings.keys() - valid_keys
-        if invalid_keys:
-            raise InvalidSettingError(str(invalid_keys))
-        if missing_keys:
-            raise MissingSettingError(str(missing_keys))
+        default_settings = {
+            'sampling_time': 0.256,
+            'data_points': 100,
+            'mode': 'absolute',
+            'direction': ('x', 'y'),
+            'change_direction': True
+            }
+        for key in settings:
+            if key not in default_settings.keys() | {'extent'}:
+                print("WARNING: invalid key: {}".format(key))
+        if 'extent' not in settings:
+            raise KeyError('extent')
+        self.settings = {**default_settings, **settings}
         self._saved_pos = None
 
     def __enter__(self):
@@ -109,7 +119,7 @@ class Measurement():
         return self
 
     def stop(self):
-        """Disconencts from all devices."""
+        """Disconnects from all devices."""
         self._table.disconnect()
         self._controller.disconnect()
 
@@ -164,19 +174,19 @@ class Measurement():
         # checker, "$C"?
 
         x, y = self._vectors()
-        positions = list(itertools.product(x, y))
+        positions = self._positions(x, y)
         length = len(positions)
         z = np.zeros(length)
         self._controller.set_sampling_time(self.settings['sampling_time'])
         self._controller.set_trigger_mode('continuous')
         t_start = timer()
-        for i, position in enumerate(positions):
+        for i, (i_pos, position) in enumerate(positions):
             print("{i: >{width:}} of {length:}  |  ".format(
                 i=i + 1, width=len(str(length)), length=length), end='')
             self._table.move(*position, mode='absolute')
             with self._controller.acquisition():
-                z[i] = self._controller.get_data(self.settings['data_points'],
-                                                 channels=[0]).mean()
+                z[i_pos] = self._controller.get_data(self.settings['data_points'],
+                                                     channels=[0]).mean()
             t_end = timer()
             t_remaining = (length - i) * (t_end - t_start) / (i + 1)
             print("remaining: {}".format(format_remaining(t_remaining)))
@@ -185,13 +195,14 @@ class Measurement():
 
     def _vectors(self):
         """
-        Generates arrays with all x and y values of the measuring area (setting
-        ``extent``).
+        Generates arrays with all absolute (x, y) values of the measuring area.
+        In contrast to np.arange, the stop value of the extent (x1 and y1) is
+        included in any  case.
 
         Returns
         -------
-        vecs : list of arrays
-            A list of arrays with all the x and y values, respectively.
+        vectors : list of arrays
+            A list containing the x and y arrays.
         """
         if self.settings['mode'] == 'relative':
             position = self._table.get_status()[1]
@@ -204,6 +215,44 @@ class Measurement():
             vec += offset
             vectors.append(vec)
         return vectors
+
+    def _positions(self, x, y):
+        """
+        Generates a list of all (x, y) positions of the measuring area in the
+        order specified by the settings ``direction`` and ``change_direction``.
+
+        Parameters
+        ----------
+        x, y : 1D array
+            array of all coordinates along one axis
+
+        Returns
+        -------
+        positions : list of 2-tuples
+            A list of all (x, y) positions
+        """
+        def sort_key(enumerated_pair):
+            i, pair = enumerated_pair
+            indices = {'x': 1, 'X': 1, 'y': 0, 'Y': 0}
+            coeff = {'-': -1, '+': 1, ' ': 1, 'x': 1, 'y': 1}
+            first_axis, second_axis = self.settings['direction']
+            keys = [pair[indices[first_axis[-1]]] * coeff[second_axis[0]],
+                    pair[indices[second_axis[-1]]] * coeff[first_axis[0]]]
+            return keys
+
+        positions = list(enumerate(itertools.product(x, y)))
+        positions.sort(key=sort_key)
+
+        if self.settings['change_direction']:
+            if self.settings['direction'][0] == 'x':
+                line_len = len(y)
+            elif self.settings['direction'][0] == 'y':
+                line_len = len(x)
+            lines = list(zip(*[positions[i::line_len] for i in range(line_len)]))
+            # reverse every second line in-place:
+            lines[1::2] = [line[::-1] for line in lines[1::2]]
+            positions = list(itertools.chain(*lines))
+        return positions
 
 
 def format_remaining(seconds):
