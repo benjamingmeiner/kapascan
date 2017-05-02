@@ -358,12 +358,19 @@ class Controller:
         self.data_socket = DataSocket(host, data_port)
         self.status_response = None
 
+    def __enter__(self):
+        return self.connect()
+
+    def __exit__(self, *args):
+        self.disconnect()
+
     def connect(self):
         """
         Connect to the control socket of the controller. The data socket
         is not connected until the actual measurement.
         """
         self.control_socket.connect()
+        return self
 
     def disconnect(self):
         """Disconnect from the control socket of the controller."""
