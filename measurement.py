@@ -108,6 +108,8 @@ class Measurement():
         Establishes all connections to the devices and performs some start up
         checks and a homing cycle if the current position is not known to grbl.
         """
+        # TODO check if extent in accord with max travel, maybe via grbl
+        # checker, "$C"?
         self._controller.connect()
         self._controller.check_status()
         status = self._table.connect()
@@ -115,7 +117,6 @@ class Measurement():
             print("Homing ...")
             self._table.home()
         self._table.check_resolution(self.settings['extent'])
-
         return self
 
     def stop(self):
@@ -170,9 +171,6 @@ class Measurement():
         z : 2D-arrary
             The acquired data values at the respective coordinates
         """
-        # TODO check if extent in accord with max travel, maybe via grbl
-        # checker, "$C"?
-
         x, y = self._vectors()
         positions = self._positions(x, y)
         length = len(positions)

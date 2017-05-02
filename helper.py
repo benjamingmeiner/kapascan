@@ -40,18 +40,23 @@ def query_yes_no(question, default="yes"):
             print("Please respond with 'yes' or 'no' (or 'y' or 'n').")
 
 
-def query_options(options):
-    prompts = ["[{}] {}".format(i + 1, line) for i, line in enumerate(options)]
-    for line in prompts:
-        print(line)
+def query_options(options, default=None):
+    for i, line in enumerate(options):
+        print("{} [{}] {}".format("-" if i + 1 == default else " ", i + 1, line))
     while True:
         choice = input("--->  ")
-        try:
-            number = int(choice)
-        except ValueError:
-            print("Please enter an interger in range 1-{}!".format(len(options)))
-            continue
-        if 0 < number < len(options) + 1:
-            return number
+        if default is not None and choice == '':
+            try:
+                return int(default)
+            except ValueError:
+                raise ValueError("Default option {} can not be casted to int".format(default))
         else:
-            print("Please enter an interger in range 1-{}!".format(len(options)))
+            try:
+                number = int(choice)
+            except ValueError:
+                print("Please enter an interger in range 1-{}!".format(len(options)))
+                continue
+            if 0 < number < len(options) + 1:
+                return number
+            else:
+                print("Please enter an interger in range 1-{}!".format(len(options)))
