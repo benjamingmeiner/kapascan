@@ -287,7 +287,7 @@ class Table:
     g_code = {'relative': 'G91',
               'absolute': 'G90'}
 
-    def __init__(self, serial_port='COM3', baudrate=115200):
+    def __init__(self, serial_port, baudrate=115200):
         self.serial_connection = SerialConnection(serial_port, baudrate)
         self._max_travel = None
         self._max_feed = None
@@ -472,7 +472,7 @@ class Table:
             The machine position after the movement.
         """
         mode = mode.lower()
-        if mode not in Table().g_code.keys():
+        if mode not in self.g_code.keys():
             raise TableError("Invalid move mode.")
         if feed == 'max':
             feed = min(self.max_feed)
