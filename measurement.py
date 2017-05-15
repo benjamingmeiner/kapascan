@@ -17,8 +17,8 @@ Example
   >>>
   >>>
 """
-import controller
-import table
+from . import controller
+from . import table
 import itertools
 import numpy as np
 from timeit import default_timer as timer

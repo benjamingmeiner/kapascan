@@ -32,7 +32,7 @@ import time
 import socket
 import struct
 import telnetlib
-from sensor import SENSORS
+from .sensor import SENSORS
 import numpy as np
 from contextlib import contextmanager
 

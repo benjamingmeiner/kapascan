@@ -81,7 +81,7 @@ $132=0.000
 
 import time
 import serial
-from helper import query_yes_no, query_options
+from .helper import query_yes_no, query_options
 
 
 class TableError(Exception):
