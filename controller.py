@@ -290,7 +290,7 @@ class DataSocket:
         """
         channels = list(channels)
         data_stream = b''
-        dtype = np.dtype(int).newbyteorder('<')
+        dtype = np.dtype(np.int32).newbyteorder('<')
         data = np.zeros((data_points, len(channels)), dtype)
         received_points = 0
         while received_points < data_points:
