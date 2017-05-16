@@ -300,7 +300,7 @@ class Table:
         if response:
             print("Grbl messages present:")
             for line in response:
-                print(line)
+                print(line.decode('ascii'))
         while True:
             if self.is_alive() is True:
                 self.serial_connection.serial_connection.read_all()
