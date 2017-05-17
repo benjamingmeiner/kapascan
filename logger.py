@@ -63,6 +63,7 @@ class SCPISocket:
         self.host = host
         self.scpi_port = scpi_port
         self.timeout = timeout
+        self.buffer = []
         self.scpi_socket = None
 
     def connect(self):
@@ -86,21 +87,27 @@ class SCPISocket:
         """Close the connection to the scpi socket."""
         self.scpi_socket.close()
 
-    def send(self, com):
-        total_sent = 0
-        encoded_com = com.encode('ascii') + b"\n"
-        while total_sent < len(encoded_com):
-            sent = self.scpi_socket.send(encoded_com[total_sent:])
+    def send(self, msg=None):
+        if msg is not None:
+            self.buffer.append(msg)
+        message = ""
+        for command in self.buffer:
+            message += command + "\n"
+        message = message.encode('ascii')
+        sent_bytes = 0
+        while sent_bytes < len(message):
+            sent = self.scpi_socket.send(message[sent_bytes:])
             if sent == 0:
                 raise LoggerError("SCPI Socket connection broken.")
-            total_sent += sent
+            sent_bytes += sent
+        self.buffer = []
 
     def receive(self):
         try:
             response = self.scpi_socket.recv(65536)
             return response.decode('ascii')
         except socket.timeout:
-            print("No data available."
+            print("No data available.")
 
 
 class Logger:
@@ -125,22 +132,19 @@ class Logger:
         self.scpi_socket.disconnect()
 
     def config(self):
-        commands = ["*RST\n",
-            "configure:temperature tc,k,(@101)\n",
-            "route:scan (@101)\n",
-            "trigger:count 1",]
-        command = ''.join(commands)
-        self.scpi_socket.command(command)
+        self.scpi_socket.buffer.append("*RST")
+        self.scpi_socket.buffer.append("configure:temperature tc,k,(@101)")
+        self.scpi_socket.buffer.append("route:mon:chan (@101)")
+        self.scpi_socket.buffer.append("route:mon:stat on")
+        self.scpi_socket.send()
 
-    def start(self):
-        self.scpi_socket.command("init")
-
-    def get_data(self):
-        return self.scpi_socket.command("fetch?")
-
-    def display(self, text):
-        self.scpi_socket.command("display:text '{}'".format(text))
+    def get_data(self, text=None):
+        if text is not None:
+            self.scpi_socket.buffer.append("display:text '{}'".format(text))
+        self.scpi_socket.buffer.append("rout:mon:data?")
+        self.scpi_socket.send()
+        return self.scpi_socket.receive()
 
     def reset_display(self):
-        self.scpi_socket.command("display:text:clear")
+        self.scpi_socket.send("display:text:clear")
 

@@ -19,6 +19,7 @@ Example
 """
 from . import controller
 from . import table
+from . import logger
 import itertools
 import numpy as np
 from timeit import default_timer as timer
@@ -75,9 +76,10 @@ class Measurement():
       >>>
     """
 
-    def __init__(self, sensor, host, serial_port, settings):
-        self._controller = controller.Controller(sensor, host)
+    def __init__(self, sensor, host_controller, serial_port, host_logger, settings):
+        self._controller = controller.Controller(sensor, host_controller)
         self._table = table.Table(serial_port)
+        self._logger = logger.Logger(host_logger)
         default_settings = {
             'sampling_time': 0.256,
             'data_points': 100,
@@ -112,6 +114,8 @@ class Measurement():
         # checker, "$C"?
         self._controller.connect()
         self._controller.check_status()
+        self._logger.connect()
+        self._logger.config()
         status = self._table.connect()
         if status.lower() == 'alarm':
             print("Homing ...")
@@ -122,6 +126,7 @@ class Measurement():
     def stop(self):
         """Disconnects from all devices."""
         self._table.disconnect()
+        self._logger.disconnect()
         self._controller.disconnect()
 
     @property
@@ -175,21 +180,25 @@ class Measurement():
         positions = self._positions(x, y)
         length = len(positions)
         z = np.zeros(length)
+        T = np.zeros(length)
         self._controller.set_sampling_time(self.settings['sampling_time'])
         self._controller.set_trigger_mode('continuous')
         t_start = timer()
         for i, (i_pos, position) in enumerate(positions):
-            print("{i: >{width:}} of {length:}  |  ".format(
-                i=i + 1, width=len(str(length)), length=length), end='')
+            counter = "{i: >{width:}} of {length:}".format(
+                i=i + 1, width=len(str(length)), length=length)
+            print(counter, end='')
+            T[i_pos] = float(self._logger.get_data(counter))
             self._table.move(*position, mode='absolute')
             with self._controller.acquisition():
                 z[i_pos] = self._controller.get_data(self.settings['data_points'],
                                                      channels=[0]).mean()
             t_end = timer()
             t_remaining = (length - i) * (t_end - t_start) / (i + 1)
-            print("remaining: {}".format(format_remaining(t_remaining)))
+            print("  |  remaining: {}".format(format_remaining(t_remaining)))
         z = np.transpose(z.reshape((len(x), len(y))))
-        return x, y, z
+        T = np.transpose(T.reshape((len(x), len(y))))
+        return x, y, z, T
 
     def _vectors(self):
         """
