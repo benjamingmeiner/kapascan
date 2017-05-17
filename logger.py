@@ -67,12 +67,11 @@ class SCPISocket:
 
     def connect(self):
         """
-        Open a new scpi socket. Data acquisition starts as soon as the socket is
-        connected.
+        Open a new scpi socket.
 
         Raises
         ------
-        DeviceError :
+        LoggerError :
             If the connection can not be established.
         """
         self.scpi_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -87,7 +86,7 @@ class SCPISocket:
         """Close the connection to the scpi socket."""
         self.scpi_socket.close()
 
-    def command(self, com):
+    def send(self, com):
         total_sent = 0
         encoded_com = com.encode('ascii') + b"\n"
         while total_sent < len(encoded_com):
@@ -96,150 +95,52 @@ class SCPISocket:
                 raise LoggerError("SCPI Socket connection broken.")
             total_sent += sent
 
+    def receive(self):
+        try:
+            response = self.scpi_socket.recv(65536)
+            return response.decode('ascii')
+        except socket.timeout:
+            print("No data available."
 
-#class Controller:
-#    """
-#    Main interface for the usage of the controller.
-#
-#    Parameters
-#    ----------
-#    sensor : str
-#        The serial number of the sensor as defined in sensor.py.
-#    host : str
-#        The hosts IP address
-#    control_port : int, optional
-#        The telnet port of the controller.
-#    data_port : int, optional
-#        The data port of the controller.
-#
-#    Example
-#    -------
-#      >>> controller = Controller('2011', '192.168.254.173')
-#      >>> controller.connect()
-#      >>> with controller.acquisition(mode="continuous", sampling_time=50):
-#      >>>    controller.get_data(data_points=100, channels=(0,1))
-#      >>> controller.disconnect()
-#    """
-#
-#    def __init__(self, sensor, host, control_port=23, data_port=10001):
-#        self.sensor = SENSORS[sensor]
-#        self.control_socket = ControlSocket(host, control_port)
-#        self.data_socket = DataSocket(host, data_port)
-#        self.status_response = None
-#
-#    def __enter__(self):
-#        return self.connect()
-#
-#    def __exit__(self, *args):
-#        self.disconnect()
-#
-#    def connect(self):
-#        """
-#        Connect to the control socket of the controller. The data socket
-#        is not connected until the actual measurement.
-#        """
-#        self.control_socket.connect()
-#        return self
-#
-#    def disconnect(self):
-#        """Disconnect from the control socket of the controller."""
-#        self.control_socket.disconnect()
-#
-#    def set_sampling_time(self, sampling_time):
-#        """
-#        Set the sampling time to the closest possible sampling time of the
-#        controller.
-#
-#        Parameters
-#        ----------
-#        sampling_time : float
-#            The desired sampling time in ms.
-#
-#        Returns
-#        -------
-#        actual_time : float
-#            The actual sampling time.
-#        """
-#        sampling_time = int(sampling_time * 1000)
-#        response = self.control_socket.command("STI{}".format(sampling_time))
-#        actual_time = int(response.strip(","))
-#        if actual_time != sampling_time:
-#            print("Set sampling time: {} ms".format(actual_time / 1000))
-#        return actual_time
-#
-#    def set_trigger_mode(self, mode):
-#        """
-#        Set the trigger mode.
-#
-#        Parameters
-#        ----------
-#        mode : str {'continuous', 'rising_edge', 'high_level', 'gate_rising_edge'}
-#            See manual for an explanation of the modes.
-#        """
-#        trg_nr = {"continuous": 0, "rising_edge": 1,
-#                  "high_level": 2, "gate_rising_edge": 3}
-#        self.control_socket.command("TRG{}".format(trg_nr[mode]))
-#
-#    def check_status(self):
-#        """
-#        Check all relevant measurement parameters of the controller.
-#
-#        This methods queries the status of the controller and compares it to the
-#        previous status that was saved as an attribute. It prints out a warning
-#        if the status changed between to subsequent calls.
-#        """
-#        response1 = self.control_socket.command("STS")
-#        response2 = self.control_socket.command("LIN?")
-#        status_response = response1 + ";LIN" + response2
-#        if self.status_response is not None:
-#            status_new = status_response.split(';')
-#            status_old = self.status_response.split(';')
-#            for new, old in zip(status_new, status_old):
-#                if new != old:
-#                    print("WARNING: "
-#                          "Changed parameter: {} to {}.".format(old, new))
-#        self.status_response = status_response
-#
-#    def trigger(self):
-#        """ Trigger a single measurement."""
-#        self.control_socket.command("GMD")
-#
-#    def get_data(self, data_points=1, channels=(0, 1)):
-#        """
-#        Get data from controller. All channels are measured simultaneously.
-#
-#        Parameters
-#        ----------
-#        data_points : int, optional
-#            number of data points to be measured (per channel).
-#        channels : list of ints, optional
-#            A list of the channels to get the data from.
-#        """
-#        return self.scale(self.data_socket.get_data(data_points, channels))
-#
-#    def scale(self, data):
-#        """Scale the acquired data to the measuring range of the sensor."""
-#        return data / 0xffffff * self.sensor['range']
-#
-#    @contextmanager
-#    def acquisition(self, mode=None, sampling_time=None):
-#        """
-#        Start the actual data acquisition by connecting to the data socket.
-#
-#        Parameters
-#        ----------
-#        mode : str {'continuous', 'rising_edge', 'high_level', 'gate_rising_edge'}
-#            The trigger mode.
-#        sampling_time : float
-#            The desired sampling time in ms. The controller automatically
-#            chooses the closest possible sampling time.
-#        """
-#        try:
-#            if mode:
-#                self.set_trigger_mode(mode)
-#            if sampling_time:
-#                self.set_sampling_time(sampling_time)
-#            self.data_socket.connect()
-#            yield
-#        finally:
-#            self.data_socket.disconnect()
+
+class Logger:
+    """
+    bla
+    """
+
+    def __init__(self, host, scpi_port=5025):
+        self.scpi_socket = SCPISocket(host, scpi_port)
+
+    def __enter__(self):
+        return self.connect()
+
+    def __exit__(self, *args):
+        self.disconnect()
+
+    def connect(self):
+        self.scpi_socket.connect()
+        return self
+
+    def disconnect(self):
+        self.scpi_socket.disconnect()
+
+    def config(self):
+        commands = ["*RST\n",
+            "configure:temperature tc,k,(@101)\n",
+            "route:scan (@101)\n",
+            "trigger:count 1",]
+        command = ''.join(commands)
+        self.scpi_socket.command(command)
+
+    def start(self):
+        self.scpi_socket.command("init")
+
+    def get_data(self):
+        return self.scpi_socket.command("fetch?")
+
+    def display(self, text):
+        self.scpi_socket.command("display:text '{}'".format(text))
+
+    def reset_display(self):
+        self.scpi_socket.command("display:text:clear")
+
