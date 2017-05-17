@@ -186,7 +186,7 @@ class Measurement():
         self._controller.set_trigger_mode('continuous')
         t_start = timer()
         for i, (i_pos, position) in enumerate(positions):
-            counter = "{i: >{width:}} of {length:}".format(
+            counter = "{i: >{width:}} / {length:}".format(
                 i=i + 1, width=len(str(length)), length=length)
             print(counter, end='')
             T[i_pos] = float(self._logger.get_data(counter))
