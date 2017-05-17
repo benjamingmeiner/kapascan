@@ -23,6 +23,7 @@ def _plot1D(x, y, xlabel, ylabel):
     ax.plot(x, y)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
+    plt.show(block=False)
     return fig
 
 
@@ -71,6 +72,7 @@ def _plot2D(x, y, z, contour=False):
     
     profile = _ProfileBuilder(fig, ax, x, y, z)
     profile.connect()
+    plt.show(block=False)
     return fig
 
 
@@ -103,6 +105,7 @@ def _plot_profile(x, y, z, src, dst):
     ax1.set_ylabel("$z$ [µm]")
     ax1.set_title("Profile Line", y=1.12)
     ax1.grid()
+    plt.show(block=False)
     return fig
 
 
