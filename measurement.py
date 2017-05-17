@@ -76,11 +76,12 @@ class Measurement():
       >>>
     """
 
-    def __init__(self, sensor, host_controller, serial_port, host_logger, settings):
-        self._controller = controller.Controller(sensor, host_controller)
+    def __init__(self, host_controller, serial_port, host_logger, settings):
+        self._controller = controller.Controller(settings['sensor'], host_controller)
         self._table = table.Table(serial_port)
         self._logger = logger.Logger(host_logger)
         default_settings = {
+            'sensor': '2011',
             'sampling_time': 0.256,
             'data_points': 100,
             'mode': 'absolute',
