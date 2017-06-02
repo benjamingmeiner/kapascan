@@ -17,19 +17,19 @@ Example
   >>>
   >>>
 """
-from . import controller
-from . import table
-from . import logger
-import itertools
-import numpy as np
-from timeit import default_timer as timer
-import datetime
 import sys
+import itertools
+from timeit import default_timer as timer
+import threading
+import datetime
+import numpy as np
+import controller
+import table
+import logger
 
 
 class MeasurementError(Exception):
     """Simple exception class used for all errors in this module."""
-
 
 class Measurement():
     """
@@ -169,34 +169,52 @@ class Measurement():
         Rasters the measuring area. Halts at every measuring position and
         acquires a certain amount of data points (setting ``data_points``). The
         mean of this data sample is used as the data value at this position.
+        Additionally, the temperature is measured at every measuring position.
 
         Returns
         -------
         x, y : 1D-array
             The vectors spanning the measuring area
-        z : 2D-arrary
+        z, T : 2D-array
             The acquired data values at the respective coordinates
         """
+        threads = []
+        self._controller.set_sampling_time(self.settings['sampling_time'])
+        self._controller.set_trigger_mode('continuous')
+
         x, y = self._vectors()
         positions = self._positions(x, y)
         length = len(positions)
         z = np.zeros(length)
         T = np.zeros(length)
-        self._controller.set_sampling_time(self.settings['sampling_time'])
-        self._controller.set_trigger_mode('continuous')
+
         t_start = timer()
         for i, (i_pos, position) in enumerate(positions):
-            counter = "{i: >{width:}} / {length:}".format(
-                i=i + 1, width=len(str(length)), length=length)
-            print(counter, end='')
-            T[i_pos] = float(self._logger.get_data(counter))
-            self._table.move(*position, mode='absolute')
-            with self._controller.acquisition():
-                z[i_pos] = self._controller.get_data(self.settings['data_points'],
-                                                     channels=[0]).mean()
-            t_end = timer()
-            t_remaining = (length - i) * (t_end - t_start) / (i + 1)
-            print("  |  remaining: {}".format(format_remaining(t_remaining)))
+            # TODO test performance of single threads (sleeps in targets usw)
+            # TODO compare to non threaded scan
+            # --- Positioning and Display---
+            threads.append(threading.Thread(
+                target=self._display_thread, name='display', args=(i, length)))
+            threads.append(threading.Thread(
+                target=self._move_thread, name='move', args=(*position,)))
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            threads.clear()
+            # --- Measurements ---
+            threads.append(threading.Thread(
+                target=self._get_z_thread, name='get_z', args=(z, i_pos)))
+            threads.append(threading.Thread(
+                target=self._get_T_thread, name='get_T', args=(T, i_pos)))
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            threads.clear()
+            t_remaining = (length - i) * (timer() - t_start) / (i + 1)
+            print("remaining: {}".format(_format_remaining(t_remaining)))
+
         z = np.transpose(z.reshape((len(x), len(y))))
         T = np.transpose(T.reshape((len(x), len(y))))
         return x, y, z, T
@@ -240,7 +258,8 @@ class Measurement():
             A list of all (x, y) positions
         """
         def sort_key(enumerated_pair):
-            i, pair = enumerated_pair
+            """ Generates the keys for the sort function. """
+            _, pair = enumerated_pair
             indices = {'x': 1, 'X': 1, 'y': 0, 'Y': 0}
             coeff = {'-': -1, '+': 1, ' ': 1, 'x': 1, 'y': 1}
             first_axis, second_axis = self.settings['direction']
@@ -250,23 +269,46 @@ class Measurement():
 
         positions = list(enumerate(itertools.product(x, y)))
         positions.sort(key=sort_key)
-
         if self.settings['change_direction']:
             if self.settings['direction'][0] == 'x':
                 line_len = len(y)
             elif self.settings['direction'][0] == 'y':
                 line_len = len(x)
+            # group positions by line
             lines = list(zip(*[positions[i::line_len] for i in range(line_len)]))
             # reverse every second line in-place:
             lines[1::2] = [line[::-1] for line in lines[1::2]]
             positions = list(itertools.chain(*lines))
         return positions
 
+    def _display_thread(self, i, length):
+        """
+        The target function of the thread showing the measurement status
+        at the logger display.
+        """
+        counter = "{i: >{width:}} / {length:}".format(
+            i=i + 1, width=len(str(length)), length=length)
+        self._logger.display(counter)
 
-def format_remaining(seconds):
+    def _move_thread(self, x, y):
+        """The target function of the thread moving the table."""
+        self._table.move(x, y, 'absolute')
+
+    def _get_z_thread(self, z, i_pos):
+        """The target function of the thread acquiring the z values."""
+        self._controller.start_acquisition(self.settings['data_points'], [0])
+        z[i_pos] = self._controller.stop_acquisition().mean()
+
+    def _get_T_thread(self, T, i_pos):
+        """The target function of the thread acquiring the temperature."""
+        T[i_pos] = self._logger.get_data()
+
+
+def _format_remaining(seconds):
     """
     Formats a timedelta object to only show the seconds without the decimal
     places.
     """
     delta = str(datetime.timedelta(seconds=seconds + 0.5))
     return delta[:-7]
+

@@ -28,11 +28,9 @@ Example
   >>> controller.disconnect()
 """
 
-import time
 import socket
-import struct
-import telnetlib
-import numpy as np
+import queue
+import threading
 from contextlib import contextmanager
 
 
@@ -65,6 +63,10 @@ class SCPISocket:
         self.timeout = timeout
         self.buffer = []
         self.scpi_socket = None
+        self.io_threads = []
+        self.out_queue = queue.Queue()
+        self.in_queue = queue.Queue()
+        self._stop_flag = False
 
     def connect(self):
         """
@@ -75,39 +77,79 @@ class SCPISocket:
         LoggerError :
             If the connection can not be established.
         """
+        self._stop_flag = False
         self.scpi_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.scpi_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.scpi_socket.settimeout(self.timeout)
         try:
             self.scpi_socket.connect((self.host, self.scpi_port))
         except OSError:
             raise LoggerError("Could not connect to {} on scpi port {}.".format(
                 self.host, self.scpi_port))
+        targets = (self._input, self._output)
+        for target in targets:
+            thread = threading.Thread(target=target, args=(self._stop,))
+            self.io_threads.append(thread)
+            thread.start()
 
     def disconnect(self):
         """Close the connection to the scpi socket."""
+        self._stop_flag = True
+        for thread in self.io_threads:
+            thread.join()
+        self.io_threads.clear()
         self.scpi_socket.close()
 
-    def send(self, msg=None):
-        if msg is not None:
-            self.buffer.append(msg)
-        message = ""
-        for command in self.buffer:
-            message += command + "\n"
-        message = message.encode('ascii')
-        sent_bytes = 0
-        while sent_bytes < len(message):
-            sent = self.scpi_socket.send(message[sent_bytes:])
-            if sent == 0:
-                raise LoggerError("SCPI Socket connection broken.")
-            sent_bytes += sent
-        self.buffer = []
+    def _stop(self):
+        return self._stop_flag
 
-    def receive(self):
-        try:
-            response = self.scpi_socket.recv(65536)
-            return response.decode('ascii')
-        except socket.timeout:
-            print("No data available.")
+    def _output(self, stop):
+        while not stop():
+            try:
+                cmd = self.out_queue.get(timeout=self.timeout)
+            except queue.Empty:
+                continue
+            # for seq in "\r\n":
+            #     cmd = cmd.replace(seq, "")
+            cmd = cmd.encode('ascii') + b"\n"
+            sent_bytes = 0
+            while sent_bytes < len(cmd):
+                sent = self.scpi_socket.send(cmd[sent_bytes:])
+                if sent == 0:
+                    raise LoggerError("SCPI Socket connection broken.")
+                sent_bytes += sent
+
+    def _input(self, stop):
+        while not stop():
+            try:
+                data = self.scpi_socket.recv(65536)
+                self.in_queue.put(data.decode('ascii'))
+            except socket.timeout:
+                continue
+
+    def command(self, cmd, wait_for_respone=False):
+        """
+        Send a command to the logger.
+
+        Parameters
+        ----------
+        com : string
+            The command to be sent to the logger.
+
+        Returns
+        -------
+        response : string
+            The answer of the device.
+        """
+        self.out_queue.put(cmd)
+        if wait_for_respone:
+            try:
+                answer = self.in_queue.get(timeout=self.timeout)
+            except queue.Empty:
+                raise ControllerError(
+                    "No response to command '{}'. ".format(cmd) +
+                    "I/O threads and logger still alive?")
+            return answer
 
 
 class Logger:
@@ -116,7 +158,7 @@ class Logger:
     """
 
     def __init__(self, host, scpi_port=5025):
-        self.scpi_socket = SCPISocket(host, scpi_port)
+        self._scpi_socket = SCPISocket(host, scpi_port)
 
     def __enter__(self):
         return self.connect()
@@ -125,26 +167,24 @@ class Logger:
         self.disconnect()
 
     def connect(self):
-        self.scpi_socket.connect()
+        self._scpi_socket.connect()
         return self
 
     def disconnect(self):
-        self.scpi_socket.disconnect()
+        self._scpi_socket.disconnect()
 
-    def config(self):
-        self.scpi_socket.buffer.append("*RST")
-        self.scpi_socket.buffer.append("configure:temperature tc,k,(@101)")
-        self.scpi_socket.buffer.append("route:mon:chan (@101)")
-        self.scpi_socket.buffer.append("route:mon:stat on")
-        self.scpi_socket.send()
+    def configure(self, channel):
+        self._scpi_socket.command("*RST")
+        self._scpi_socket.command("configure:temperature tc,k,(@{})".format(channel))
+        self._scpi_socket.command("route:mon:chan (@{})".format(channel))
+        self._scpi_socket.command("route:mon:stat on")
 
-    def get_data(self, text=None):
-        if text is not None:
-            self.scpi_socket.buffer.append("display:text '{}'".format(text))
-        self.scpi_socket.buffer.append("rout:mon:data?")
-        self.scpi_socket.send()
-        return self.scpi_socket.receive()
+    def get_data(self):
+        return self._scpi_socket.command("route:mon:data?", wait_for_respone=True)
 
     def reset_display(self):
-        self.scpi_socket.send("display:text:clear")
+        self._scpi_socket.command("display:text:clear")
+
+    def display(self, text):
+        self._scpi_socket.command("display:text '{}'".format(text))
 
