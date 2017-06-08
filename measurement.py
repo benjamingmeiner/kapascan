@@ -286,8 +286,9 @@ class Measurement():
         The target function of the thread showing the measurement status
         at the logger display.
         """
-        counter = "{i: >{width:}} / {length:}".format(
+        counter = "{i: >{width:}}/{length:}".format(
             i=i + 1, width=len(str(length)), length=length)
+        counter = counter.rjust(13)
         self._logger.display(counter)
 
     def _move_thread(self, x, y):
