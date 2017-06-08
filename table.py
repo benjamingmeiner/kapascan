@@ -78,6 +78,7 @@ $132=0.000
 """
 # TODO check for exceptions that can be raised
 
+import os
 import time
 import csv
 import threading
@@ -85,7 +86,7 @@ import queue
 import re
 from functools import wraps
 import serial
-from helper import query_yes_no, query_options, cached_property
+from .helper import query_yes_no, query_options, cached_property
 
 
 class TableError(Exception):
@@ -120,24 +121,26 @@ class GrblError(TableError):
     """Mapping from grbl error codes to the corresponding error messages."""
 
     def __init__(self, i):
-        super().__init__("Error {}: {}".format(i, self.error_message[i]))
-        self.i = i
+        self.i = int(i)
+        super().__init__("Error {}: {}".format(i, self.error_message[self.i]))
 
-    with open('error_codes/error_codes_en_US.csv', newline='') as file:
+    error_dirname = os.path.join(os.path.dirname(__file__), 'error_codes')
+    with open(os.path.join(error_dirname, 'errors.csv'), newline='') as file:
         reader = csv.reader(file)
-        error_message = {row[0]: row[2] for row in reader}
+        error_message = {int(row[0]): row[2] for row in reader}
 
 
 class GrblAlarm(TableError):
     """Mapping from grbl alarm codes to the corresponding error messages."""
 
     def __init__(self, i):
-        super().__init__("ALARM {}: {}".format(i, self.alarm_message[i]))
-        self.i = i
+        self.i = int(i)
+        super().__init__("ALARM {}: {}".format(i, self.alarm_message[self.i]))
 
-    with open('error_codes/alarm_codes_en_US.csv', newline='') as file:
+    error_dirname = os.path.join(os.path.dirname(__file__), 'error_codes')
+    with open(os.path.join(error_dirname, 'alarms.csv'), newline='') as file:
         reader = csv.reader(file)
-        alarm_message = {row[0]: row[2] for row in reader}
+        alarm_message = {int(row[0]): row[2] for row in reader}
 
 
 class SerialConnection:
@@ -280,9 +283,9 @@ class SerialConnection:
             line = self.serial_connection.readline()
             if line:
                 line = line.decode('ascii').strip("\r\n")
-                print("Got: {}".format(repr(line)))
+                # print("Got: {}".format(repr(line)))
                 key, value = self._message_parser(line)
-                print("Parsed: {} | {}".format(key, value))
+                # print("Parsed: {} | {}".format(key, value))
                 if key == 'error':
                     raise GrblError(value[0])
                 if key == 'alarm':
@@ -304,7 +307,7 @@ class SerialConnection:
             for seq in "\r\n":
                 cmd = cmd.replace(seq, "")
             cmd = cmd.encode('ascii') + b"\n"
-            print("Sending: {}".format(cmd))
+            # print("Sending: {}".format(cmd))
             self.serial_connection.write(cmd)
 
     def _message_parser(self, msg):

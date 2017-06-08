@@ -23,9 +23,9 @@ from timeit import default_timer as timer
 import threading
 import datetime
 import numpy as np
-import controller
-import table
-import logger
+from . import controller
+from . import table
+from . import logger
 
 
 class MeasurementError(Exception):
@@ -77,11 +77,12 @@ class Measurement():
     """
 
     def __init__(self, host_controller, serial_port, host_logger, settings):
-        self._controller = controller.Controller(settings['sensor'], host_controller)
+        self._controller = controller.Controller(settings['sensors'], host_controller)
         self._table = table.Table(serial_port)
         self._logger = logger.Logger(host_logger)
         default_settings = {
-            'sensor': '2011',
+            'sensors': ['2011'],
+            'logger_channel': 101,
             'sampling_time': 0.256,
             'data_points': 100,
             'mode': 'absolute',
@@ -114,9 +115,8 @@ class Measurement():
         # TODO check if extent in accord with max travel, maybe via grbl
         # checker, "$C"?
         self._controller.connect()
-        self._controller.check_status()
         self._logger.connect()
-        self._logger.config()
+        self._logger.configure(self.settings['logger_channel'])
         status = self._table.connect()
         if status.lower() == 'alarm':
             print("Homing ...")
@@ -190,7 +190,7 @@ class Measurement():
 
         t_start = timer()
         for i, (i_pos, position) in enumerate(positions):
-            # TODO test performance of single threads (sleeps in targets usw)
+            # TODO test perforontrollemance of single threads (sleeps in targets usw)
             # TODO compare to non threaded scan
             # --- Positioning and Display---
             threads.append(threading.Thread(
@@ -296,7 +296,7 @@ class Measurement():
 
     def _get_z_thread(self, z, i_pos):
         """The target function of the thread acquiring the z values."""
-        self._controller.start_acquisition(self.settings['data_points'], [0])
+        self._controller.start_acquisition(self.settings['data_points'])
         z[i_pos] = self._controller.stop_acquisition().mean()
 
     def _get_T_thread(self, T, i_pos):

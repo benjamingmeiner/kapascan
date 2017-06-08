@@ -36,7 +36,7 @@ import queue
 import threading
 from functools import wraps
 from contextlib import contextmanager
-from sensor import SENSORS
+from .sensor import SENSORS
 import numpy as np
 
 # TODO check all IO for exceptions that can be raised
@@ -494,7 +494,7 @@ class Controller:
            scaled_data[i] = channel_data / 0xffffff * sensor['range']
         return scaled_data
 
-    def start_acquisition(self, data_points=1,mode=None, sampling_time=None):
+    def start_acquisition(self, data_points=1, mode=None, sampling_time=None):
         """
         Starts the actual data acquisition by connecting to the data socket. All
         channels are measured simultaneously.
@@ -524,5 +524,4 @@ class Controller:
         except queue.Empty:
             raise NoDataAcquired
         return data
-
 

@@ -57,7 +57,7 @@ class SCPISocket:
       >>>
     """
 
-    def __init__(self, host, scpi_port=5025, timeout=3):
+    def __init__(self, host, scpi_port=5025, timeout=2):
         self.host = host
         self.scpi_port = scpi_port
         self.timeout = timeout
