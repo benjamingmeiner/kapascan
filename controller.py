@@ -21,11 +21,12 @@ the device. All end-user functionality of the interface is implemented in class
 
 Example
 -------
-  >>> controller = Controller('2011', '192.168.254.173')
-  >>> controller.connect()
-  >>> with controller.acquisition(mode="continuous", sampling_time=50):
-  >>>    controller.get_data(data_points=100, channels=(0,1))
-  >>> controller.disconnect()
+  >>> controller = Controller(['2011'], '192.168.254.173')
+  >>> with controller:
+  >>>     controller.start_acquisition(data_points=100,
+  >>>                                  mode="continuous",
+  >>>                                  sampling_time=50)
+  >>>     data = controller.stop_acquisition()
 """
 
 import time
@@ -73,7 +74,7 @@ class ControlSocket:
     control_port : int, optional
         The telnet port of the controller.
     timeout : int, optional
-        The time in seconds the socket stops to tries to connect.
+        The time in seconds the socket stops trying to connect.
 
     Example
     -------
@@ -96,11 +97,11 @@ class ControlSocket:
 
     def connect(self):
         """
-        Open the connection to the telnet socket.
+        Open the connection to the telnet socket and starts the I/O threads.
 
         Raises
         ------
-        DeviceError :
+        ControllerError :
             If the connection can not be established or closes unexpectedly.
         """
         if not self.io_threads:
@@ -136,6 +137,15 @@ class ControlSocket:
         return self._stop_flag
 
     def _output(self, stop):
+        """
+        The target function of the output thread. Gets the commands to write
+        from out_queue and writes the to the telnet socket.
+
+        Parameters
+        ----------
+        stop: function
+            The thread runs as long as the function call evaluates to True.
+        """
         while not stop():
             try:
                 cmd = self.out_queue.get(timeout=self.timeout)
@@ -489,7 +499,7 @@ class Controller:
 
     def scale(self, data):
         """Scales the acquired data to the measuring range of the sensor."""
-        scaled_data = np.zeros_like(data)
+        scaled_data = np.zeros_like(data, dtype=np.float64)
         for i, (sensor, channel_data) in enumerate(zip(self.sensors, data)):
            scaled_data[i] = channel_data / 0xffffff * sensor['range']
         return scaled_data

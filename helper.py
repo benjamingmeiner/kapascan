@@ -1,5 +1,5 @@
 """
-Helper functions, not fitting into the other modules.
+Miscellaneous functions.
 """
 
 
@@ -62,22 +62,38 @@ def query_yes_no(question, default="yes"):
 
 
 def query_options(options, default=None):
+    """
+    Prints out enumerated options, the user can chose from.
+
+    Parameters
+    ----------
+    options : list of str
+        The options that are presented to the user
+    default : int, optional
+        The default option that is chosen if the user just hits <Enter>.
+    Raises
+    ------
+    ValueError:
+        If the default option can not be interpreted as int.
+    """
     for i, line in enumerate(options):
-        print("{} [{}] {}".format("-" if i + 1 == default else " ", i + 1, line))
+        default_mark = "-" if i + 1 == default else " "
+        print("{} [{}] {}".format(default_mark, i + 1, line))
     while True:
         choice = input("--->  ")
         if default is not None and choice == '':
             try:
                 return int(default)
             except ValueError:
-                raise ValueError("Default option {} can not be casted to int".format(default))
+                raise ValueError("Default option {}".format(default) +
+                                 "can not be interpreted as int.")
         else:
             try:
                 number = int(choice)
             except ValueError:
-                print("Please enter an interger in range 1-{}!".format(len(options)))
+                print("Enter an number in range 1-{}!".format(len(options)))
                 continue
             if 0 < number < len(options) + 1:
                 return number
             else:
-                print("Please enter an interger in range 1-{}!".format(len(options)))
+                print("Enter an number in range 1-{}!".format(len(options)))
