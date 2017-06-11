@@ -32,21 +32,16 @@ Example
 import time
 import socket
 import struct
-import telnetlib
-import queue
-import threading
-from functools import wraps
-from contextlib import contextmanager
-from .sensor import SENSORS
 import numpy as np
+import telnetlib
+from .sensor import SENSORS
+from .base import IOBase, Device, on_connection
 
 # TODO check all IO for exceptions that can be raised
-# TODO check status responses from device for errors
 # TODO use frame counter
-
-# TODO name threads
-# TODO Implement NotConnectedError
-# TODO pass exceptions from I/O threds to main thread?
+# TODO use proper custom exceptions
+# TODO pass exceptions from I/O threads to main thread?
+# TODO refactor errors (less)
 
 class ControllerError(Exception):
     """Simple exception class used for all errors in this module."""
@@ -60,7 +55,7 @@ class WrongParameterError(ControllerError):
     """Raise when a command with a wrong parameter is sent to the controller."""
 
 
-class ControlSocket:
+class ControlSocket(IOBase):
     """
     Interface to the Telnet port of the controller.
 
@@ -85,121 +80,54 @@ class ControlSocket:
       >>> control_socket.disconnect()
     """
 
-    def __init__(self, host, control_port=23, timeout=2):
-        self.host = host
-        self.control_port = control_port
-        self.timeout = timeout
-        self.control_socket = None
-        self.io_threads = []
-        self.out_queue = queue.Queue()
-        self.in_queue = queue.Queue()
-        self._stop_flag = False
+    def __init__(self, host, control_port=23):
+        super().__init__((host, control_port))
+        self.socket = None
 
-    def connect(self):
-        """
-        Open the connection to the telnet socket and starts the I/O threads.
+    def _open(self):
+        self.socket = telnetlib.Telnet()
+        try:
+            self.socket.open(*self.address, self.timeout)
+        except OSError:
+            raise ControllerError("Could not connect to "
+                 "{} on telnet port {}.".format(*self.address))
+        time.sleep(0.1)
+        try:
+            while self.socket.read_eager():
+                pass
+        except EOFError:
+            raise ControllerError("Connection to "
+                "{} closed unexpectedly.".format(self.address[0]))
 
-        Raises
-        ------
-        ControllerError :
-            If the connection can not be established or closes unexpectedly.
-        """
-        if not self.io_threads:
-            self._stop_flag = False
-            self.control_socket = telnetlib.Telnet()
-            try:
-                self.control_socket.open(self.host, self.control_port, self.timeout)
-            except OSError:
-                raise ControllerError("Could not connect to "
-                    "{} on telnet port {}.".format(self.host, self.control_port))
-            time.sleep(0.1)
-            try:
-                while self.control_socket.read_eager():
-                    pass
-            except EOFError:
-                raise ControllerError("Connection to "
-                    "{} closed unexpectedly.".format(self.host))
-            targets = (self._input, self._output)
-            for target in targets:
-                thread = threading.Thread(target=target, args=(self._stop,))
-                self.io_threads.append(thread)
-                thread.start()
+    def _close(self):
+        self.socket.close()
 
-    def disconnect(self):
-        """Closes the telnet socket and stops the I/O threads."""
-        self._stop_flag = True
-        for thread in self.io_threads:
-            thread.join()
-        self.io_threads.clear()
-        self.control_socket.close()
+    def _send(self, cmd):
+        for seq in "\r\n":
+            cmd = cmd.replace(seq, "")
+        cmd = b"$" + cmd.encode('ascii') + b"\r\n"
+        self.socket.write(cmd)
 
-    def _stop(self):
-        return self._stop_flag
-
-    def _output(self, stop):
-        """
-        The target function of the output thread. Gets the commands to write
-        from out_queue and writes the to the telnet socket.
-
-        Parameters
-        ----------
-        stop: function
-            The thread runs as long as the function call evaluates to True.
-        """
-        while not stop():
-            try:
-                cmd = self.out_queue.get(timeout=self.timeout)
-            except queue.Empty:
-                continue
-            for seq in "\r\n":
-                cmd = cmd.replace(seq, "")
-            cmd = b"$" + cmd.encode('ascii') + b"\r\n"
-            self.control_socket.write(cmd)
-
-    def _input(self, stop):
-        while not stop():
-            line = self.control_socket.read_until(b"\n", timeout=self.timeout)
-            if line:
-                line = line.decode('ascii').strip("\r\n")
-                if "$UNKNOWN COMMAND" in line:
-                    raise UnknownCommandError()
-                if "$WRONG PARAMETER" in line:
-                    raise WrongParameterError()
-                if line.endswith("OK"):
-                    self.in_queue.put(line[:-2])
-                else:
-                    raise ControllerError(
-                        "Unexpected response: '{}'".format(line))
+    def _receive(self):
+        line = self.socket.read_until(b"\n", timeout=self.timeout)
+        if line:
+            line = line.decode('ascii').strip("\r\n")
+            if "$UNKNOWN COMMAND" in line:
+                raise UnknownCommandError()
+            if "$WRONG PARAMETER" in line:
+                raise WrongParameterError()
+            if line.endswith("OK"):
+                return line[:-2]
+            else:
+                raise ControllerError("Unexpected response: '{}'".format(line))
+        else:
+            return None
 
     def command(self, cmd):
-        """
-        Send a command to the controller.
+        return super().command(cmd, get_response=True)[len(cmd) + 1:]
 
-        Parameters
-        ----------
-        com : string
-            The command to be sent to the controller without the preceding '$'.
 
-        Returns
-        -------
-        answer : string
-            The response of the device without the preceding command and
-            trailing 'OK'.
-        """
-        self.out_queue.put(cmd)
-        try:
-            answer = self.in_queue.get(timeout=self.timeout)
-        except queue.Empty:
-            raise ControllerError(
-                "No response to command '{}'. ".format(cmd) + 
-                "I/O threads and controller still alive?")
-        if answer.startswith("$" + cmd):
-            return answer[len(cmd) + 1:]
-        else:
-            raise ControllerError(
-                "Unexpected response '{}' on command '{}'.".format(answer, cmd))
-
-class DataSocket:
+class DataSocket(IOBase):
     """
     Interface to the data port of the controller.
 
@@ -209,8 +137,6 @@ class DataSocket:
         The hosts IP address.
     data_port : int, optional
         The data port of the controller.
-    timeout : int, optional
-        The time in seconds after which the socket stops to trying to connect.
 
     Example
     -------
@@ -264,45 +190,28 @@ class DataSocket:
     """
 
     def __init__(self, host, data_port=10001, timeout=2):
-        self.host = host
-        self.data_port = data_port
-        self.timeout = timeout
-        self.data_socket = None
-        self.in_thread = None
-        self.in_queue = queue.Queue()
-        self._stop_flag = False
+        super().__init__((host, data_port), timeout, do_input=True, do_output=False)
+        self._socket = None
 
-    def acquire(self, data_points, sensors):
-        """
-        Open a new data socket. Data acquisition starts as soon as the socket is
-        connected.
+    def _open(self):
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.settimeout(self.timeout)
+        try:
+            self._socket.connect(self.address)
+        except OSError:
+            raise ControllerError("Could not connect to {} on port {}.".format(
+                *self.address))
 
-        Raises
-        ------
-        DeviceError :
-            If the connection can not be established.
-        """
-        if not self.in_thread:
-            self._stop_flag = False
-            self.data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.data_socket.settimeout(self.timeout)
-            try:
-                self.data_socket.connect((self.host, self.data_port))
-            except OSError:
-                raise ControllerError("Could not connect to {} on port {}.".format(
-                    self.host, self.data_port))
-            self.in_thread = threading.Thread(target=self._get_data,
-                                              args=(data_points, sensors))
-            self.in_thread.start()
+    def _close(self):
+        self._socket.close()
 
-    def end(self):
-        """Close the connection to the data socket."""
-        self._stop_flag = True
-        self.in_thread.join()
-        self.in_thread = None
-        self.data_socket.close()
+    def _receive(self):
+        try:
+            return self._socket.recv(65536)
+        except socket.timeout:
+            return None
 
-    def _get_data(self, data_points, sensors):
+    def get_data(self, data_points, sensors):
         """
         Get measurement data from the controller.
 
@@ -337,7 +246,7 @@ class DataSocket:
         received_points = 0
         while received_points < data_points:
             while len(data_stream) < 32:
-                data_stream += self._wait_for_data()
+                data_stream += self.in_queue.get()
             nr_of_channels, nr_of_frames, bytes_per_frame, frame_counter = \
                 self._parse_header(data_stream)
 #            if received_points != frame_counter - 1:
@@ -349,7 +258,7 @@ class DataSocket:
                 raise ControllerError("Device has only {} channels.".format(
                     nr_of_channels))
             while len(data_stream) < 32 + payload_size:
-                data_stream += self._wait_for_data()
+                data_stream += self.in_queue.get()
             payload = data_stream[32:32 + payload_size]
             for i in range(nr_of_frames):
                 if received_points < data_points:
@@ -360,14 +269,7 @@ class DataSocket:
                 else:
                     break
             data_stream = data_stream[32 + payload_size:]
-        self.in_queue.put(data.T)
-
-    def _wait_for_data(self):
-        while True:
-            try:
-                return self.data_socket.recv(65536)
-            except socket.timeout:
-                continue
+        return data.T
 
     def _parse_header(self, data_stream):
         """
@@ -392,7 +294,7 @@ class DataSocket:
         return nr_of_channels, nr_of_frames, bytes_per_frame, frame_counter
 
 
-class Controller:
+class Controller(Device):
     """
     Main interface for the usage of the controller.
 
@@ -421,38 +323,14 @@ class Controller:
         self.control_socket = ControlSocket(host, control_port)
         self.data_socket = DataSocket(host, data_port)
         self.status_response = None
-        self.connected = False
 
-    def __enter__(self):
-        return self.connect()
-
-    def __exit__(self, *args):
-        self.disconnect()
-
-    def connect(self):
-        """
-        Connects to the control socket of the controller. The data socket
-        is not connected until the actual measurement.
-        """
+    def _connect(self):
         self.control_socket.connect()
-        self.connected = True
-        return self
 
-    def disconnect(self):
-        """Disconnect from the control socket of the controller."""
+    def _disconnect(self):
         self.control_socket.disconnect()
-        self.connected = False
 
-    def _on_connection(f):
-        @wraps(f)
-        def checked(self, *args, **kwargs):
-            if self.connected:
-                return f(self, *args, **kwargs)
-            else:
-                raise NotConnectedError
-        return checked
-
-    @_on_connection
+    @on_connection
     def set_sampling_time(self, sampling_time):
         """
         Sets the sampling time to the closest possible sampling time of the
@@ -475,7 +353,7 @@ class Controller:
             print("Set sampling time: {} ms".format(actual_time / 1000))
         return actual_time
 
-    @_on_connection
+    @on_connection
     def set_trigger_mode(self, mode):
         """
         Sets the trigger mode.
@@ -489,7 +367,7 @@ class Controller:
                   "high_level": 2, "gate_rising_edge": 3}
         self.control_socket.command("TRG{}".format(trg_nr[mode]))
 
-    @_on_connection
+    @on_connection
     def trigger(self):
         """ Trigger a single measurement."""
         self.control_socket.command("GMD")
@@ -501,7 +379,7 @@ class Controller:
            scaled_data[i] = channel_data / 0xffffff * sensor['range']
         return scaled_data
 
-    def start_acquisition(self, data_points=1, mode=None, sampling_time=None):
+    def acquire(self, data_points=1, mode=None, sampling_time=None):
         """
         Starts the actual data acquisition by connecting to the data socket. All
         channels are measured simultaneously.
@@ -522,13 +400,9 @@ class Controller:
             self.set_trigger_mode(mode)
         if sampling_time:
             self.set_sampling_time(sampling_time)
-        self.data_socket.acquire(data_points, self.sensors)
-
-    def stop_acquisition(self):
-        self.data_socket.end()
         try:
-            data = self.scale(self.data_socket.in_queue.get_nowait())
-        except queue.Empty:
-            raise NoDataAcquired
-        return data
-
+            self.data_socket.connect()
+            data = self.data_socket.get_data(data_points, self.sensors)
+            return self.scale(data)
+        finally:
+            self.data_socket.disconnect()

@@ -27,6 +27,7 @@ import numpy as np
 from . import controller
 from . import table
 from . import logger
+from .base import ExceptionThread
 
 
 class MeasurementError(Exception):
@@ -199,9 +200,9 @@ class Measurement():
             # TODO test perforontrollemance of single threads (sleeps in targets usw)
             # TODO compare to non threaded scan
             # --- Positioning and Display---
-            threads.append(threading.Thread(
+            threads.append(ExceptionThread(
                 target=self._move_thread, name='move', args=(*position,)))
-            threads.append(threading.Thread(
+            threads.append(ExceptionThread(
                 target=self._display_thread, name='display', args=(i, length)))
             for thread in threads:
                 thread.start()
@@ -210,9 +211,9 @@ class Measurement():
             threads.clear()
             # --- Measurements ---
             t[i] = time.time()
-            threads.append(threading.Thread(
+            threads.append(ExceptionThread(
                 target=self._get_z_thread, name='get_z', args=(z, i_pos)))
-            threads.append(threading.Thread(
+            threads.append(ExceptionThread(
                 target=self._get_T_thread, name='get_T', args=(T, i_pos)))
             for thread in threads:
                 thread.start()
@@ -329,8 +330,7 @@ class Measurement():
 
     def _get_z_thread(self, z, i_pos):
         """The target function of the thread acquiring the z values."""
-        self._controller.start_acquisition(self.settings['data_points'])
-        z[:, i_pos] = self._controller.stop_acquisition().mean(1)
+        z[:, i_pos] = self._controller.acquire(self.settings['data_points']).mean(1)
 
     def _get_T_thread(self, T, i_pos):
         """The target function of the thread acquiring the temperature."""

@@ -10,8 +10,8 @@ settings = {
     'data_points': 100,
     'mode': 'absolute',
     'direction': ('x', 'y'),
-    'change_direction': False,
-    'extent': ((0, 2, 1), (0, 2, 1))
+    'change_direction': True,
+    'extent': ((4, 6, 0.5), (4, 5, 0.5))
     }
 
 m = Measurement(host_controller, serial_port, host_logger, settings)
