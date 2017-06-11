@@ -87,13 +87,15 @@ import re
 from functools import wraps
 import serial
 from .helper import query_yes_no, query_options, cached_property
+from .base import IOBase, Device, on_connection
+
 
 
 class TableError(Exception):
     """Simple exception class used for all errors in this module."""
 
 
-class ConenctionError(TableError):
+class SerialConenctionError(TableError):
     """Raised on serial connection errors."""
 
 
@@ -143,7 +145,7 @@ class GrblAlarm(TableError):
         alarm_message = {int(row[0]): row[2] for row in reader}
 
 
-class SerialConnection:
+class SerialConnection(IOBase):
     """
     Interface to the serial port of the Arduino running grbl.
 
@@ -180,135 +182,62 @@ class SerialConnection:
         regex[key] = re.compile(pattern)
 
 
-    def __init__(self, serial_port, baud_rate=115200, timeout=2):
+    def __init__(self, serial_port, baud_rate=115200):
+        super().__init__((serial_port, baud_rate))
         # TODO: pass all known serial parameters
-        self.serial_connection = serial.Serial()
-        self.serial_connection.port = serial_port
-        self.serial_connection.baudrate = baud_rate
-        self.serial_connection.dtr = None
-        self.timeout = timeout
-        self.serial_connection.timeout = self.timeout
-        self.io_threads = []
-        self.out_queue = queue.Queue()
-        self.in_queue = queue.Queue()
-        self._stop_flag = False
+        self.connection = serial.Serial()
+        self.connection.port = self.address[0]
+        self.connection.baudrate = self.address[1]
+        self.connection.dtr = None
+        self.connection.timeout = self.timeout
 
-    def connect(self):
+    def _open(self):
         """
         Opens the serial connection and starts the I/O threads.
         The serial port cannot be used by another application at the same time.
         """
-        if not self.io_threads:
-            self._stop_flag = False
+        if not self.threads:
             while True:
                 try:
-                    self.serial_connection.open()
+                    self.connection.open()
                     break
                 except serial.SerialException as error:
                     print(error)
                     if not query_yes_no("Retry?"):
                         raise NotConnectedError
-            self.serial_connection.write(b"\n\n")
+            self.connection.write(b"\n\n")
             time.sleep(self.timeout)
-            self.serial_connection.flushInput()
-            targets = (self._input, self._output)
-            for target in targets:
-                thread = threading.Thread(target=target, args=(self._stop,))
-                self.io_threads.append(thread)
-                thread.start()
+            self.connection.flushInput()
 
-    def disconnect(self):
-        """Closes the serial connection and stops the I/O threads."""
-        self._stop_flag = True
-        for thread in self.io_threads:
-            thread.join()
-        self.io_threads.clear()
-        self.serial_connection.close()
+    def _close(self):
+        self.connection.close()
 
-    def command(self, cmd, timeout=None):
-        """
-        Sends a command to grbl and returns its response.
+    def _send(self, cmd):
+        for seq in "\r\n":
+            cmd = cmd.replace(seq, "")
+        print("Sending: {}".format(cmd))
+        cmd = cmd.encode('ascii') + b"\n"
+        self.connection.write(cmd)
 
-        The function returns all subsequent lines of the device including the
-        acknowledging 'ok', which is the last line of the answer.
-
-        Parameters
-        ----------
-        cmd : str
-            The command to be sent.
-        timeout: float, optional
-            The maximal time in seconds that is waited for a response from the
-            device. If timout is None, the timeout value of the class is used.
-
-        Returns
-        -------
-        answer :
-            The pre-parsed answer from the device. See docstring of
-            '_method_parser' for the format of the parsed messages.
-
-        Raises
-        ------
-        TimeOutError :
-            If no more messages are present in the input queue, although the
-            response of the device is not complete. (Missing 'ok')
-        """
-        if timeout is None:
-            timeout = self.timeout
-        self.out_queue.put(cmd)
-        answer = []
+    def _receive(self):
+        lines = []
         while True:
-            try:
-                message = self.in_queue.get(timeout=timeout)
-            except queue.Empty:
-                raise TimeOutError(
-                    "No/incomplete response to command '{}'.".format(cmd) +
-                    "I/O threads still alive?")
-            answer.append(message)
-            if message[0] == 'ok':
-                break
-        return answer
-
-    def _stop(self):
-        """
-        This function is called from all threads that run eternally, to check
-        when it is time to exit.
-        """
-        return self._stop_flag
-
-    def _input(self, stop):
-        """
-        Target function of the input thread. Puts all received and parsed
-        messages into the in_queue."""
-        while not stop():
-            line = self.serial_connection.readline()
+            line = self.connection.readline()
             if line:
                 line = line.decode('ascii').strip("\r\n")
-                # print("Got: {}".format(repr(line)))
+                print("Got: {}".format(repr(line)))
                 key, value = self._message_parser(line)
-                # print("Parsed: {} | {}".format(key, value))
+                lines.append((key, value))
+                #print("Parsed: {} | {}".format(key, value))
                 if key == 'error':
                     raise GrblError(value[0])
                 if key == 'alarm':
                     raise GrblAlarm(value[0])
-                if key == 'empty':
-                    continue
-                self.in_queue.put((key, value))
-
-    def _output(self, stop):
-        """
-        Target function of the output thread. Takes commands from the out_queue
-        and writes them to the serial connection.
-        """
-        while not stop():
-            try:
-                cmd = self.out_queue.get(timeout=self.timeout)
-            except queue.Empty:
-                continue
-            for seq in "\r\n":
-                cmd = cmd.replace(seq, "")
-            cmd = cmd.encode('ascii') + b"\n"
-            # print("Sending: {}".format(cmd))
-            self.serial_connection.write(cmd)
+                if key == 'ok':
+                    break
+            else:
+                return None
+        return lines
 
     def _message_parser(self, msg):
         """
@@ -342,11 +271,12 @@ class SerialConnection:
                 message = (key, groups)
                 break
         if message is None:
-            raise ConnectionError("Unrecognized response from grbl: {}".format(msg))
+            raise ConnectionError(
+                "Unrecognized response from grbl: {}".format(msg))
         return message
 
 
-class Table:
+class Table(Device):
     """
     Main interface for the usage of the table.
 
@@ -368,20 +298,12 @@ class Table:
               'absolute': 'G90'}
 
     def __init__(self, serial_port, baud_rate=115200):
+        super().__init__()
         self.serial_connection = SerialConnection(serial_port, baud_rate)
-        self.connected = False
 
-    def __enter__(self):
-        self.connect()
-        return self
-
-    def __exit__(self, *args):
-        self.disconnect()
-
-    def connect(self):
+    def _connect(self):
         """Connects to the serial port of the Arduino running grbl."""
         self.serial_connection.connect()
-        self.connected = True
         while True:
             try:
                 return self.get_status()[0]
@@ -400,30 +322,11 @@ class Table:
                 elif option == 3:
                     raise NotConnectedError
 
-    def disconnect(self):
+    def _disconnect(self):
         """Disconnects from the serial port."""
         self.serial_connection.disconnect()
-        self.connected = False
 
-    def _on_connection(f):
-        """
-        Decorator for methods that are only allowed to be called if the
-        connection is established.
-
-        Raises
-        ------
-        NotConnectedError :
-            If the Table instance is not connected.
-        """
-        @wraps(f)
-        def checked(self, *args, **kwargs):
-            if self.connected:
-                return f(self, *args, **kwargs)
-            else:
-                raise NotConnectedError
-        return checked
-
-    @_on_connection
+    @on_connection
     def reset(self):
         """
         Initiates a soft-reset.
@@ -439,7 +342,7 @@ class Table:
         else:
             raise ResetError
 
-    @_on_connection
+    @on_connection
     def unlock(self):
         """
         Unlocks grbl for movements.
@@ -457,7 +360,7 @@ class Table:
         else:
             raise UnlockError
 
-    @_on_connection
+    @on_connection
     def _get_property(self, ids):
         """
         Gets grbl '$'-settings.
@@ -472,6 +375,7 @@ class Table:
         properties : list of floats
             list with the corresponding setting values.
         """
+        print("About to get: {}".format(ids))
         answer = self.serial_connection.command("$$")
         properties = []
         for id in ids:
@@ -481,13 +385,13 @@ class Table:
         return properties
 
     @cached_property
-    @_on_connection
+    @on_connection
     def resolution(self):
         """Returns (x_res, y_res), the resolution of each axis in steps/mm."""
         return self._get_property([100, 101])
 
     @cached_property
-    @_on_connection
+    @on_connection
     def max_travel(self):
         """
         Returns (x_max, y_max), the maximal travel distance of each axis in mm.
@@ -495,7 +399,7 @@ class Table:
         return self._get_property([130, 131])
 
     @cached_property
-    @_on_connection
+    @on_connection
     def max_feed(self):
         """
         Returns (feed_x_max, feed_y_max), the maximal feed of each axis in
@@ -503,7 +407,7 @@ class Table:
         """
         return self._get_property([110, 111])
 
-    @_on_connection
+    @on_connection
     def get_status(self):
         """
         Get the status of the device.
@@ -523,6 +427,7 @@ class Table:
             if no machine position (MPos) is present in grbl status report.
         """
         key, value = self.serial_connection.command("?")[0]
+        print(key, value)
         if key == 'status':
             status = value[0]
             if value[1] == 'MPos':
@@ -534,14 +439,14 @@ class Table:
         return status, position
 
 
-    @_on_connection
+    @on_connection
     def home(self):
         """
         Starts the homing cycle. Blocks until finished.
         """
         self.serial_connection.command("$H", timeout=30)
 
-    @_on_connection
+    @on_connection
     def move(self, x=None, y=None, mode='absolute', feed='max'):
         """
         Moves the table to the desired coordinates.
@@ -601,7 +506,7 @@ class Table:
                 time.sleep(0.014)
         return position
 
-    @_on_connection
+    @on_connection
     def interact(self):
         """
         Starts the interactive mode, where the user can directly communicate
@@ -641,7 +546,7 @@ class Table:
                 else:
                     raise
 
-    @_on_connection
+    @on_connection
     def check_resolution(self, extent):
         """
         Checks if the grid points of the measuring area lie on the stepper motor
