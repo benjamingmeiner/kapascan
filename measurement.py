@@ -188,15 +188,16 @@ class Measurement():
         z = np.zeros(length)
         T = np.zeros(length)
 
+        self._table.move(*positions[1][1], mode='absolute')
         t_start = timer()
         for i, (i_pos, position) in enumerate(positions):
             # TODO test perforontrollemance of single threads (sleeps in targets usw)
             # TODO compare to non threaded scan
             # --- Positioning and Display---
             threads.append(threading.Thread(
-                target=self._display_thread, name='display', args=(i, length)))
-            threads.append(threading.Thread(
                 target=self._move_thread, name='move', args=(*position,)))
+            threads.append(threading.Thread(
+                target=self._display_thread, name='display', args=(i, length)))
             for thread in threads:
                 thread.start()
             for thread in threads:

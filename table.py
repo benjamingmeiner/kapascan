@@ -574,7 +574,7 @@ class Table:
             if status.lower() == "idle":
                 break
             else:
-                time.sleep(0.05)
+                time.sleep(0.01)
         return position
 
     @_on_connection
