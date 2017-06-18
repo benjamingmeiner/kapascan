@@ -77,9 +77,6 @@ class Measurement():
     """
 
     def __init__(self, host_controller, serial_port, host_logger, settings):
-        self._controller = controller.Controller(settings['sensors'], host_controller)
-        self._table = table.Table(serial_port)
-        self._logger = logger.Logger(host_logger)
         default_settings = {
             'sensors': ['2011'],
             'logger_channel': 101,
@@ -95,6 +92,10 @@ class Measurement():
         if 'extent' not in settings:
             raise KeyError('extent')
         self.settings = {**default_settings, **settings}
+        self._controller = controller.Controller(self.settings['sensors'],
+                                                 host_controller)
+        self._table = table.Table(serial_port)
+        self._logger = logger.Logger(host_logger)
         self._saved_pos = None
 
     def __enter__(self):
@@ -223,8 +224,8 @@ class Measurement():
     def _vectors(self):
         """
         Generates arrays with all absolute (x, y) values of the measuring area.
-        In contrast to np.arange, the stop value of the extent (x1 and y1) is
-        included in any  case.
+        In contrast to np.arange, the meauring range includes the stop value of
+        the extent (x1 and y1) in any case.
 
         Returns
         -------
@@ -238,7 +239,10 @@ class Measurement():
         vectors = []
         for range_, offset in zip(self.settings['extent'], position):
             start, stop, step = range_
-            vec = np.arange(start, stop + 0.5 * step, step, dtype=np.float)
+            if step >= stop - start:
+                vec = np.array([start, stop], dtype=np.float)
+            else:
+                vec = np.arange(start, stop + 0.5 * step, step, dtype=np.float)
             vec += offset
             vectors.append(vec)
         return vectors
@@ -262,7 +266,7 @@ class Measurement():
             """ Generates the keys for the sort function. """
             _, pair = enumerated_pair
             indices = {'x': 1, 'X': 1, 'y': 0, 'Y': 0}
-            coeff = {'-': -1, '+': 1, ' ': 1, 'x': 1, 'y': 1}
+            coeff = {'-': -1, '+': 1, ' ': 1, 'x': 1, 'X': 1, 'y': 1, 'Y': 1}
             first_axis, second_axis = self.settings['direction']
             keys = [pair[indices[first_axis[-1]]] * coeff[second_axis[0]],
                     pair[indices[second_axis[-1]]] * coeff[first_axis[0]]]
@@ -271,10 +275,10 @@ class Measurement():
         positions = list(enumerate(itertools.product(x, y)))
         positions.sort(key=sort_key)
         if self.settings['change_direction']:
-            if self.settings['direction'][0] == 'x':
-                line_len = len(y)
-            elif self.settings['direction'][0] == 'y':
+            if self.settings['direction'][0][-1] in 'xX':
                 line_len = len(x)
+            elif self.settings['direction'][0][-1] in 'yY':
+                line_len = len(y)
             # group positions by line
             lines = list(zip(*[positions[i::line_len] for i in range(line_len)]))
             # reverse every second line in-place:
