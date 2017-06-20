@@ -239,7 +239,9 @@ class Measurement():
         vectors = []
         for range_, offset in zip(self.settings['extent'], position):
             start, stop, step = range_
-            if step >= stop - start:
+            if start == stop:
+                vec = np.array([start], dtype=np.float)
+            elif step >= stop - start:
                 vec = np.array([start, stop], dtype=np.float)
             else:
                 vec = np.arange(start, stop + 0.5 * step, step, dtype=np.float)

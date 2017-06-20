@@ -11,7 +11,7 @@ settings = {
     'mode': 'absolute',
     'direction': ('x', 'y'),
     'change_direction': True,
-    'extent': ((4, 4.25, 0.0025), (4, 4, 0.0025))
+    'extent': ((4, 6, 0.005), (4, 4.1, 0.005))
     }
 
 m = Measurement(host_controller, serial_port, host_logger, settings)
