@@ -2,7 +2,7 @@ from kapascan.measurement import Measurement
 
 host_controller = '192.168.254.173'
 serial_port = '/dev/ttyACM0'
-host_logger = '192.168.254.51'
+host_logger = '192.168.254.174'
 settings = {
     'sensors': ['1739'],
     'logger_channel': 101,
