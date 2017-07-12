@@ -192,7 +192,7 @@ class Measurement():
 
         self._table.move(*positions[1][1], mode='absolute')
         t_start = timer()
-        for i, (i_pos, position) in enumerate(positions):
+        for i, (i_pos, position) in _log_progress(list(enumerate(positions))):
             # TODO test perforontrollemance of single threads (sleeps in targets usw)
             # TODO compare to non threaded scan
             # --- Positioning and Display---
@@ -216,7 +216,7 @@ class Measurement():
                 thread.join()
             threads.clear()
             t_remaining = (length - i) * (timer() - t_start) / (i + 1)
-            print("remaining: {}".format(_format_remaining(t_remaining)))
+            # print("remaining: {}".format(_format_remaining(t_remaining)))
 
         z = z.reshape(width, len(x), len(y)).transpose(0, 2, 1)
         T = T.reshape((len(x), len(y))).transpose()
@@ -318,6 +318,73 @@ def _format_remaining(seconds):
     Formats a timedelta object to only show the seconds without the decimal
     places.
     """
+    if seconds == "?":
+        return "?"
     delta = str(datetime.timedelta(seconds=seconds + 0.5))
     return delta[:-7]
 
+
+def _log_progress(sequence, every=1, size=None, name='Position', timeit=True):
+    from ipywidgets import IntProgress, HTML, VBox
+    from IPython.display import display
+
+    is_iterator = False
+    if size is None:
+        try:
+            size = len(sequence)
+        except TypeError:
+            is_iterator = True
+            timeit = False
+    if size is not None:
+        if every is None:
+            if size <= 200:
+                every = 1
+            else:
+                every = int(size / 200)     # every 0.5%
+    else:
+        assert every is not None, 'sequence is iterator, set every'
+
+    if is_iterator:
+        progress = IntProgress(min=0, max=1, value=1)
+        progress.bar_style = 'info'
+    else:
+        progress = IntProgress(min=0, max=size, value=0)
+    label = HTML()
+    box = VBox(children=[label, progress])
+    display(box)
+
+    index = 0
+    t_remaining = "?"
+    t_start = timer()
+    try:
+        for index, record in enumerate(sequence, 1):
+            if index == 1 or index % every == 0:
+                if is_iterator:
+                    label.value = '{name}: {index} / ?'.format(
+                        name=name,
+                        index=index
+                    )
+                else:
+                    progress.value = index
+                    labelstring = u'{name}: {index} / {size}'.format(
+                        name=name,
+                        index=index,
+                        size=size,
+                    )
+                    if timeit:
+                        labelstring = labelstring + u' &nbsp;&nbsp; | &nbsp;&nbsp; Remaining: {time}'.format(
+                            time = _format_remaining(t_remaining)
+                        )
+                    label.value = labelstring
+            yield record
+            t_remaining = (size - index - 1) * (timer() - t_start) / (index)
+    except:
+        progress.bar_style = 'danger'
+        raise
+    else:
+        progress.bar_style = 'success'
+        progress.value = index
+        label.value = "{name}: {index}".format(
+            name=name,
+            index=str(index or '?')
+        )

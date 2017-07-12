@@ -1,6 +1,6 @@
 from kapascan.logger import Logger
 
-host = '192.168.254.51'
+host = '192.168.254.173'
 channel = 101
 
 l = Logger(host)
