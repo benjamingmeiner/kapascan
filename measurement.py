@@ -186,7 +186,8 @@ class Measurement():
         x, y = self._vectors()
         positions = self._positions(x, y)
         length = len(positions)
-        z = np.zeros(length)
+        width = len(self.settings['sensors'])
+        z = np.zeros((width, length))
         T = np.zeros(length)
 
         self._table.move(*positions[1][1], mode='absolute')
@@ -217,8 +218,8 @@ class Measurement():
             t_remaining = (length - i) * (timer() - t_start) / (i + 1)
             print("remaining: {}".format(_format_remaining(t_remaining)))
 
-        z = np.transpose(z.reshape((len(x), len(y))))
-        T = np.transpose(T.reshape((len(x), len(y))))
+        z = z.reshape(width, len(x), len(y)).transpose(0, 2, 1)
+        T = T.reshape((len(x), len(y))).transpose()
         return x, y, z, T
 
     def _vectors(self):
@@ -305,7 +306,7 @@ class Measurement():
     def _get_z_thread(self, z, i_pos):
         """The target function of the thread acquiring the z values."""
         self._controller.start_acquisition(self.settings['data_points'])
-        z[i_pos] = self._controller.stop_acquisition().mean()
+        z[:, i_pos] = self._controller.stop_acquisition().mean(1)
 
     def _get_T_thread(self, T, i_pos):
         """The target function of the thread acquiring the temperature."""

@@ -360,10 +360,7 @@ class DataSocket:
                 else:
                     break
             data_stream = data_stream[32 + payload_size:]
-        if len(channels) == 1:
-            self.in_queue.put(data.T)
-        else:
-            self.in_queue.put(data.T)
+        self.in_queue.put(data.T)
 
     def _wait_for_data(self):
         while True:
