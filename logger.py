@@ -171,6 +171,7 @@ class Logger:
         return self
 
     def disconnect(self):
+        self.reset_display()
         self._scpi_socket.disconnect()
 
     def configure(self, channel):

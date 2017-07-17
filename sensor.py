@@ -14,5 +14,5 @@ value: dict with
 SENSORS = {
     '2011': {'serial_nr': '2011', 'name': 'CS2', 'channel':0, 'range': 2000, 'diameter': 8.2},
     '2012': {'serial_nr': '2012', 'name': 'CS2', 'channel':0, 'range': 2000, 'diameter': 8.2},
-    '1739': {'serial_nr': '1739', 'name': 'CS05', 'channel':0, 'range': 500, 'diameter': 2},
+    '1739': {'serial_nr': '1739', 'name': 'CS05', 'channel':1, 'range': 1000, 'diameter': 2},
 }
