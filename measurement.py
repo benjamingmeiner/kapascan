@@ -20,8 +20,9 @@ Example
 import sys
 import itertools
 from timeit import default_timer as timer
-import threading
+import time
 import datetime
+import threading
 import numpy as np
 from . import controller
 from . import table
@@ -189,6 +190,7 @@ class Measurement():
         width = len(self.settings['sensors'])
         z = np.zeros((width, length))
         T = np.zeros(length)
+        t = np.zeros(length)
 
         self._table.move(*positions[1][1], mode='absolute')
         t_start = timer()
@@ -206,6 +208,7 @@ class Measurement():
                 thread.join()
             threads.clear()
             # --- Measurements ---
+            t[i_pos] = time.time()
             threads.append(threading.Thread(
                 target=self._get_z_thread, name='get_z', args=(z, i_pos)))
             threads.append(threading.Thread(
@@ -220,7 +223,8 @@ class Measurement():
 
         z = z.reshape(width, len(x), len(y)).transpose(0, 2, 1)
         T = T.reshape((len(x), len(y))).transpose()
-        return x, y, z, T
+        return x, y, z, T, t
+
 
     def _vectors(self):
         """
