@@ -61,11 +61,12 @@ class Measurement():
         ``direction`` : tuple of str, optional
             Specifies the order and the direction in which the axes are moved.
             Defaults to ('x', 'y'). The two elements of the tuple set the
-            'primary' and 'secondary'axis, where the primary axis is the axis
-            that determines the principal scanning direction.
-            Possible keys for the axis specification are 'x' and 'y', optionally
-            prefixed with a sign the sets the direction, e.g. ('-y', 'x') for a
-            scan in negative y-direction, starting at the minimal x value.
+            'primary' and 'secondary' axis, where the primary axis is the axis
+            that moves first and hence determines the principal scanning
+            direction. Possible keys for the axis specification are 'x' and 'y',
+            optionally prefixed with a sign that sets the direction,
+            e.g. ('-y', 'x') for a scan in negative y-direction, starting at the
+            minimal x value.
         ``change_direction`` : bool, optional
             Changes the primary scanning direction after each line. Defaults to
             True.
@@ -82,7 +83,7 @@ class Measurement():
             'sensors': ['2011'],
             'logger_channel': 101,
             'sampling_time': 0.256,
-            'data_points': 100,
+            'data_points': 50,
             'mode': 'absolute',
             'direction': ('x', 'y'),
             'change_direction': True
@@ -208,7 +209,7 @@ class Measurement():
                 thread.join()
             threads.clear()
             # --- Measurements ---
-            t[i_pos] = time.time()
+            t[i] = time.time()
             threads.append(threading.Thread(
                 target=self._get_z_thread, name='get_z', args=(z, i_pos)))
             threads.append(threading.Thread(
@@ -364,21 +365,13 @@ def _log_progress(sequence, every=1, size=None, name='Position', timeit=True):
         for index, record in enumerate(sequence, 1):
             if index == 1 or index % every == 0:
                 if is_iterator:
-                    label.value = '{name}: {index} / ?'.format(
-                        name=name,
-                        index=index
-                    )
+                    label.value = u'{}: {} / ?'.format(name, index)
                 else:
                     progress.value = index
-                    labelstring = u'{name}: {index} / {size}'.format(
-                        name=name,
-                        index=index,
-                        size=size,
-                    )
+                    labelstring = u'{}: {} / {}'.format(name, index, size)
                     if timeit:
-                        labelstring = labelstring + u' &nbsp;&nbsp; | &nbsp;&nbsp; Remaining: {time}'.format(
-                            time = _format_remaining(t_remaining)
-                        )
+                        labelstring = labelstring + u' &nbsp;&nbsp; | &nbsp;&nbsp; Remaining: {}'.format(
+                            _format_remaining(t_remaining))
                     label.value = labelstring
             yield record
             t_remaining = (size - index - 1) * (timer() - t_start) / (index)
@@ -388,7 +381,4 @@ def _log_progress(sequence, every=1, size=None, name='Position', timeit=True):
     else:
         progress.bar_style = 'success'
         progress.value = index
-        label.value = "{name}: {index}".format(
-            name=name,
-            index=str(index or '?')
-        )
+        label.value = "{}: {}".format(name, str(index or '?'))
