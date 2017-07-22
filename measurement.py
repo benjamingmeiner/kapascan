@@ -201,7 +201,8 @@ class Measurement():
         t = np.zeros(length)
 
         self._table.move(*positions[1][1], mode='absolute')
-        logger.info(__("Started scan with {} positions.", length))
+        logger.info("Started scan.")
+        logger.info(__("Scanning {} positions ...", length))
         for i, (i_pos, position) in _log_progress(list(enumerate(positions))):
             # --- Positioning and Display---
             threads.append(ExceptionThread(
