@@ -541,7 +541,7 @@ class Table:
         self.serial_connection.command("$H", timeout=30)
 
     @_on_connection
-    def move(self, x, y, mode, feed='max'):
+    def move(self, x=None, y=None, mode='absolute', feed='max'):
         """
         Moves the table to the desired coordinates.
         Blocks until movement is finished.
@@ -565,15 +565,21 @@ class Table:
         mode = mode.lower()
         if mode not in self.g_code.keys():
             raise TableError("Invalid move mode.")
+        command = "G1 {} ".format(self.g_code[mode])
+        if x is not None:
+            command += "X{} ".format(x) 
+        if y is not None:
+            command += "Y{} ".format(y) 
         if feed == 'max':
             feed = min(self.max_feed)
-        self.serial_connection.command("G1 {} X{} Y{} F{}".format(
-            self.g_code[mode], x, y, feed))
+        command += "F{}".format(feed)
+        self.serial_connection.command(command)
         while True:
             status, position = self.get_status()
             if status.lower() == "idle":
                 break
             else:
+                # TODO: Auto optimize polling frequency based on step length
                 time.sleep(0.014)
         return position
 
