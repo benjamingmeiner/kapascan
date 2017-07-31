@@ -226,6 +226,25 @@ class Measurement():
         T = T.reshape((len(x), len(y))).transpose()
         return x, y, z, T, t
 
+    def check_wipe(self):
+        x_min_sample = self.settings['extent'][0][0]
+        delta_x_sample = self.settings['extent'][0][1] - x_min_sample
+        if x_min_sample < 16.5 + delta_x_sample:
+            raise MeasurementError("Not enough space for complete wipe of the sample.")
+
+    def wipe(self):
+        # TODO: parametrize movement
+        print("Wiping sample ...")
+        pos = self.position
+        xmax = self._table.max_travel[0]
+        self._table.move(x=xmax)
+        ywipe = pos[1] - 26
+        if ywipe < 0:
+            ywipe = 0
+        self._table.move(y=ywipe)
+        self._table.move(x=0)
+        self._table.move(x=5)
+        self._table.move(*pos)
 
     def _vectors(self):
         """
