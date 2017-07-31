@@ -11,13 +11,13 @@ settings = {
     'mode': 'absolute',
     'direction': ('x', 'y'),
     'change_direction': False,
-    'extent': ((0, 5, 1), (0, 5, 1))
+    'extent': ((0, 2, 1), (0, 2, 1))
     }
 
 m = Measurement(host_controller, serial_port, host_logger, settings)
 
 with m:
-    x, y, z, T = m.scan()
+    x, y, z, T, t = m.scan()
 
 print(x, y)
 print(z)
