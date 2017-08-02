@@ -372,7 +372,8 @@ class Table:
         self.connected = False
 
     def __enter__(self):
-        return self.connect()
+        self.connect()
+        return self
 
     def __exit__(self, *args):
         self.disconnect()
@@ -573,6 +574,23 @@ class Table:
         if feed == 'max':
             feed = min(self.max_feed)
         command += "F{}".format(feed)
+        self.serial_connection.command(command)
+        while True:
+            status, position = self.get_status()
+            if status.lower() == "idle":
+                break
+            else:
+                # TODO: Auto optimize polling frequency based on step length
+                time.sleep(0.014)
+        return position
+
+    def arc_move(self, x, y, r, mode='absolute', feed='max'):
+        mode = mode.lower()
+        if mode not in self.g_code.keys():
+            raise TableError("Invalid move mode.")
+        if feed == 'max':
+            feed = min(self.max_feed)
+        command = "G2 {} X{} Y{} R{} F{}".format(self.g_code[mode], x, y, r, feed)
         self.serial_connection.command(command)
         while True:
             status, position = self.get_status()
