@@ -1,6 +1,21 @@
 """
 Miscellaneous functions.
 """
+import pprint
+
+class BraceMessage(object):
+    def __init__(self, obj, *args, pretty=False, **kwargs):
+        self.obj = obj
+        self.pretty = pretty
+        self.args = args
+        self.kwargs = kwargs
+
+    def __str__(self):
+        if self.pretty:
+            args = [pprint.pformat(arg) for arg in self.args]
+            return self.obj + "\n".join(args)
+        else:
+            return self.obj.format(*self.args, **self.kwargs)
 
 
 class cached_property(object):

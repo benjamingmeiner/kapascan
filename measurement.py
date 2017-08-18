@@ -23,15 +23,22 @@ from timeit import default_timer as timer
 import time
 import datetime
 import threading
+import logging
 import numpy as np
+from pprint import pformat as pretty
 from . import controller
 from . import table
-from . import logger
+from . import data_logger
 from .base import ExceptionThread
+from .helper import BraceMessage as __
+
+
+logger = logging.getLogger(__name__)
 
 
 class MeasurementError(Exception):
     """Simple exception class used for all errors in this module."""
+
 
 class Measurement():
     """
@@ -79,10 +86,10 @@ class Measurement():
       >>>
     """
 
-    def __init__(self, host_controller, serial_port, host_logger, settings):
+    def __init__(self, host_controller, serial_port, host_data_logger, settings):
         default_settings = {
             'sensors': ['2011'],
-            'logger_channel': 101,
+            'data_logger_channel': 101,
             'sampling_time': 0.256,
             'data_points': 50,
             'mode': 'absolute',
@@ -95,23 +102,14 @@ class Measurement():
         if 'extent' not in settings:
             raise KeyError('extent')
         self.settings = {**default_settings, **settings}
+        logger.info(__("Initialized measurement with settings:\n", self.settings, pretty=True))
         self._controller = controller.Controller(self.settings['sensors'],
                                                  host_controller)
         self._table = table.Table(serial_port)
-        self._logger = logger.Logger(host_logger)
+        self._data_logger = data_logger.DataLogger(host_data_logger)
         self._saved_pos = None
 
-    def __enter__(self):
-        try:
-            return self.initialize()
-        except BaseException as error:
-            self.__exit__(*sys.exc_info())
-            raise error
-
-    def __exit__(self, *args):
-        self.stop()
-
-    def initialize(self):
+    def connect(self):
         """
         Establishes all connections to the devices and performs some start up
         checks and a homing cycle if the current position is not known to grbl.
@@ -119,20 +117,28 @@ class Measurement():
         # TODO check if extent in accord with max travel, maybe via grbl
         # checker, "$C"?
         self._controller.connect()
-        self._logger.connect()
-        self._logger.configure(self.settings['logger_channel'])
+        self._data_logger.connect()
+        self._data_logger.configure(self.settings['data_logger_channel'])
         status = self._table.connect()
         if status.lower() == 'alarm':
-            print("Homing ...")
             self._table.home()
         self._table.check_resolution(self.settings['extent'])
-        return self
 
-    def stop(self):
+    def disconnect(self, *args):
         """Disconnects from all devices."""
         self._table.disconnect()
-        self._logger.disconnect()
+        self._data_logger.disconnect()
         self._controller.disconnect()
+
+    def __enter__(self):
+        try:
+            self.connect()
+            return self
+        except BaseException as error:
+            self.__exit__(*sys.exc_info())
+            raise error
+
+    __exit__ = disconnect
 
     @property
     def position(self):
@@ -195,10 +201,8 @@ class Measurement():
         t = np.zeros(length)
 
         self._table.move(*positions[1][1], mode='absolute')
-        t_start = timer()
+        logger.info(__("Started scan with {} positions.", length))
         for i, (i_pos, position) in _log_progress(list(enumerate(positions))):
-            # TODO test perforontrollemance of single threads (sleeps in targets usw)
-            # TODO compare to non threaded scan
             # --- Positioning and Display---
             threads.append(ExceptionThread(
                 target=self._move_thread, name='move', args=(*position,)))
@@ -220,11 +224,10 @@ class Measurement():
             for thread in threads:
                 thread.join()
             threads.clear()
-            t_remaining = (length - i) * (timer() - t_start) / (i + 1)
-            # print("remaining: {}".format(_format_remaining(t_remaining)))
 
         z = z.reshape(width, len(x), len(y)).transpose(0, 2, 1)
         T = T.reshape((len(x), len(y))).transpose()
+        logger.info("Finished scan.")
         return x, y, z, T, t
 
     def check_wipe(self):
@@ -317,12 +320,12 @@ class Measurement():
     def _display_thread(self, i, length):
         """
         The target function of the thread showing the measurement status
-        at the logger display.
+        at the data logger display.
         """
         counter = "{i: >{width:}}/{length:}".format(
             i=i + 1, width=len(str(length)), length=length)
         counter = counter.rjust(13)
-        self._logger.display(counter)
+        self._data_logger.display(counter)
 
     def _move_thread(self, x, y):
         """The target function of the thread moving the table."""
@@ -334,7 +337,7 @@ class Measurement():
 
     def _get_T_thread(self, T, i_pos):
         """The target function of the thread acquiring the temperature."""
-        T[i_pos] = self._logger.get_data()
+        T[i_pos] = self._data_logger.get_data()
 
 
 def _format_remaining(seconds):
@@ -349,8 +352,9 @@ def _format_remaining(seconds):
 
 
 def _log_progress(sequence, every=1, size=None, name='Position', timeit=True):
-    from ipywidgets import IntProgress, HTML, VBox
+    from ipywidgets import IntProgress, HTML, VBox, HBox
     from IPython.display import display
+    progress_logger = logging.getLogger(__name__ + ".progress")
 
     is_iterator = False
     if size is None:
@@ -373,31 +377,34 @@ def _log_progress(sequence, every=1, size=None, name='Position', timeit=True):
         progress.bar_style = 'info'
     else:
         progress = IntProgress(min=0, max=size, value=0)
-    label = HTML()
+    position_label = HTML()
+    time_label = HTML()
+    label = HBox(children=[position_label, time_label])
     box = VBox(children=[label, progress])
     display(box)
 
     index = 0
-    t_remaining = "?"
-    t_start = timer()
+    if timeit:
+        t_remaining = "?"
+        t_start = timer()
     try:
         for index, record in enumerate(sequence, 1):
             if index == 1 or index % every == 0:
                 if is_iterator:
-                    label.value = u'{}: {} / ?'.format(name, index)
+                    position_label.value = u'{}: {} / ?'.format(name, index)
                 else:
                     progress.value = index
-                    labelstring = u'{}: {} / {}'.format(name, index, size)
+                    position_label.value = u'{}: {} / {}'.format(name, index, size)
                     if timeit:
-                        labelstring = labelstring + u' &nbsp;&nbsp; | &nbsp;&nbsp; Remaining: {}'.format(
-                            _format_remaining(t_remaining))
-                    label.value = labelstring
+                        time_label.value =  u' | Remaining: {}'.format(_format_remaining(t_remaining))
+            progress_logger.info(position_label.value + time_label.value)
             yield record
-            t_remaining = (size - index - 1) * (timer() - t_start) / (index)
+            if timeit:
+                t_remaining = (size - index - 1) * (timer() - t_start) / (index)
     except:
         progress.bar_style = 'danger'
         raise
     else:
         progress.bar_style = 'success'
         progress.value = index
-        label.value = "{}: {}".format(name, str(index or '?'))
+        position_label.value = "{}: {}".format(name, str(index or '?'))

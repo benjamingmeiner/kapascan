@@ -84,11 +84,15 @@ import csv
 import threading
 import queue
 import re
+import logging
 from functools import wraps
 import serial
 from .helper import query_yes_no, query_options, cached_property
 from .base import IOBase, Device, on_connection
+from .helper import BraceMessage as __
 
+
+logger = logging.getLogger(__name__)
 
 
 class TableError(Exception):
@@ -109,10 +113,6 @@ class UnlockError(TableError):
 
 class NotConnectedError(TableError):
     """Raised if Connection to grbl is unsuccessful."""
-
-
-class TimeOutError(TableError):
-    """Raised if timeout occurs on grbl status query."""
 
 
 class NotOnGridError(TableError):
@@ -190,6 +190,7 @@ class SerialConnection(IOBase):
         self.connection.baudrate = self.address[1]
         self.connection.dtr = None
         self.connection.timeout = self.timeout
+        self.connection.timeout = self.timeout
 
     def _open(self):
         """
@@ -202,38 +203,51 @@ class SerialConnection(IOBase):
                     self.connection.open()
                     break
                 except serial.SerialException as error:
+                    logger.error(error)
                     print(error)
                     if not query_yes_no("Retry?"):
                         raise NotConnectedError
             self.connection.write(b"\n\n")
             time.sleep(self.timeout)
             self.connection.flushInput()
+            logger.debug(__("Connected to {} at {} baud.", *self.address))
 
     def _close(self):
         self.connection.close()
+        logger.debug(__("Disconnected from {}.", self.address[0]))
 
     def _send(self, cmd):
         for seq in "\r\n":
             cmd = cmd.replace(seq, "")
-        print("Sending: {}".format(cmd))
-        cmd = cmd.encode('ascii') + b"\n"
-        self.connection.write(cmd)
+        if cmd not in ['?', 'r', '~', '!']:
+            cmd += "\n"
+        logger.debug(__("Sending: {!r}", cmd))
+        try:
+            self.connection.write(cmd.encode('ascii'))
+        except serial.SerialTimeoutException:
+            msg = __("Timeout: Could not write '{}' to serial device.", cmd)
+            logger.error(msg)
+            raise TableError(msg)
 
     def _receive(self):
         lines = []
         while True:
-            line = self.connection.readline()
+            line = self.connection.readline().decode('ascii')
             if line:
-                line = line.decode('ascii').strip("\r\n")
-                print("Got: {}".format(repr(line)))
+                logger.debug(__("Received: {!r}", line))
+                line = line.strip("\r\n")
                 key, value = self._message_parser(line)
                 lines.append((key, value))
-                #print("Parsed: {} | {}".format(key, value))
+                logger.debug(__("Parsed message: {} | {}", key, value))
                 if key == 'error':
+                    error = GrblError(value[0])
+                    logger.error(error)
                     raise GrblError(value[0])
                 if key == 'alarm':
-                    raise GrblAlarm(value[0])
-                if key == 'ok':
+                    error = GrblAlarm(value[0])
+                    logger.critical(error)
+                    raise error
+                if key in ['ok', 'status']:
                     break
             else:
                 return None
@@ -306,11 +320,14 @@ class Table(Device):
         self.serial_connection.connect()
         while True:
             try:
-                return self.get_status()[0]
-            except TimeOutError:
+                answer = self.get_status()[0]
+                logger.debug("Communication with grbl is ok.")
+                return answer
+            except TimeoutError:
                 print("Grbl doesn't answer. Possible reasons could be:")
                 print("  -- grbl is in an alarm state.")
                 print("  -- grbl is too busy. (homing cycle, maybe?)")
+                print("  -- another connection to grbl is still open.")
                 print("What do you want to do?\n")
                 option = query_options(["Do a soft-reset.",
                                         "Retry.",
@@ -320,6 +337,7 @@ class Table(Device):
                 elif option == 2:
                     pass
                 elif option == 3:
+                    logger.debug("Connection aborted by user.")
                     raise NotConnectedError
 
     def _disconnect(self):
@@ -328,19 +346,10 @@ class Table(Device):
 
     @on_connection
     def reset(self):
-        """
-        Initiates a soft-reset.
-
-        Raises
-        ------
-        ResetError :
-            If reset is not successul.
-        """
-        key, _ = self.serial_connection.command("r")[0]
-        if key == 'welcome_message':
-            print("Reset.")
-        else:
-            raise ResetError
+        """Initiates a soft-reset."""
+        self.serial_connection.command("r")
+        self.serial_connection.disconnect()
+        self.serial_connection.connect()
 
     @on_connection
     def unlock(self):
@@ -354,10 +363,11 @@ class Table(Device):
         """
         key, value = self.serial_connection.command("$X")[0]
         if key == 'message' and value[0] == 'MSG:Caution: Unlocked':
-            print("Caution! Unlocked.")
-        if key == 'ok':
-            print("Unlocked already.")
+            logger.info("Unlocked manually.")
+        elif key == 'ok':
+            pass
         else:
+            logger.error("grbl unlock failed.", exc_info=True)
             raise UnlockError
 
     @on_connection
@@ -375,7 +385,7 @@ class Table(Device):
         properties : list of floats
             list with the corresponding setting values.
         """
-        print("About to get: {}".format(ids))
+        logger.debug(__("Getting grbl setting ids {}.", ids))
         answer = self.serial_connection.command("$$")
         properties = []
         for id in ids:
@@ -427,14 +437,14 @@ class Table(Device):
             if no machine position (MPos) is present in grbl status report.
         """
         key, value = self.serial_connection.command("?")[0]
-        print(key, value)
         if key == 'status':
             status = value[0]
             if value[1] == 'MPos':
                 position = value[2].split(",")[0:2]
             else:
-                raise TableError("No machine position present in status report."
-                                 "Configure grbl!")
+                msg = "No machine position present in status report. Configure grbl!"
+                logging.error(msg)
+                raise TableError(msg)
             position = tuple(float(p) for p in position)
         return status, position
 
@@ -444,6 +454,7 @@ class Table(Device):
         """
         Starts the homing cycle. Blocks until finished.
         """
+        logger.info("Homing ...")
         self.serial_connection.command("$H", timeout=30)
 
     @on_connection
@@ -567,7 +578,8 @@ class Table(Device):
         for res, ext in zip(resolution, extent):
             for value in ext:
                 if not round((res * value), 8).is_integer():
-                    message = ("extent value: {} mm; ".format(value) +
-                               "motor resolution: {} steps per mm".format(res))
-                    raise NotOnGridError(message)
+                    msg = __("extent value: {} mm; "
+                             "motor resolution: {} steps per mm", value, res)
+                    logger.error(msg)
+                    raise NotOnGridError(msg)
 

@@ -31,14 +31,19 @@ Example
 # TODO: document timeout behaveour.
 
 import socket
+import logging
 from .base import IOBase, Device, on_connection
+from .helper import BraceMessage as __
 
-class LoggerError(Exception):
+logger = logging.getLogger(__name__)
+
+
+class DataLoggerError(Exception):
     """Simple exception class used for all errors in this module."""
 
 class SCPISocket(IOBase):
     """
-    Interface to the TCP SCPI socket of the Data Logger.
+    Interface to the TCP SCPI socket of the data logger.
 
     Parameters
     ----------
@@ -67,30 +72,39 @@ class SCPISocket(IOBase):
         try:
             self.socket.connect(self.address)
         except OSError:
-            raise LoggerError("Could not connect to {} on scpi port {}.".format(
-                self.address[0], self.address[1]))
+            msg = __("Could not connect to {} on scpi port {}.", *self.address)
+            logger.error(msg)
+            raise DataLoggerError(msg)
+        else:
+            logger.debug(__("Connected to {} on scpi port {}.", *self.address))
 
     def _close(self):
         self.socket.close()
+        logger.debug(__("Disconnected from {}:{}.", *self.address))
 
     def _send(self, cmd):
-        cmd = cmd.encode('ascii') + b"\n"
+        cmd += "\n"
+        logger.debug(__("Sending: {!r}", cmd))
+        cmd = cmd.encode('ascii')
         sent_bytes = 0
         while sent_bytes < len(cmd):
             sent = self.socket.send(cmd[sent_bytes:])
             if sent == 0:
-                raise LoggerError("SCPI Socket connection broken.")
+                msg = __("{}:{}: SCPI socket broken.", *self.address)
+                logger.error(msg)
+                raise DataLoggerError(msg)
             sent_bytes += sent
 
     def _receive(self):
         try:
-            data = self.socket.recv(65536)
-            return data.decode('ascii')
+            data = self.socket.recv(65536).decode('ascii')
+            logger.debug(__("Received: {!r}", data))
+            return data
         except socket.timeout:
             return None
 
 
-class Logger(Device):
+class DataLogger(Device):
     """
     bla
     """
