@@ -4,15 +4,19 @@ Base classes that implement general I/O functionality with devices.
 
 import threading
 import queue
+import logging
 from functools import wraps
 
 # TODO add timeouts to signatures.
+
+
+logger = logging.getLogger(__name__)
 
 class ExceptionThread(threading.Thread):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.exception_queue = queue.Queue()
-    
+
     def run(self):
         try:
             super().run()
@@ -27,7 +31,7 @@ class ExceptionThread(threading.Thread):
             pass
         else:
             raise exc
-        
+
 
 class IOBase():
     """
@@ -111,16 +115,16 @@ class IOBase():
         for target in self._targets:
             name = self.__class__.__name__ + "." + target.__name__
             thread = ExceptionThread(target=target, name=name)
-            print("Starting: {}".format(thread.name))
             self.threads.append(thread)
             thread.start()
+            logger.debug("Started thread: {}".format(thread.name))
 
     def disconnect(self):
         """Disconnects from the device and stops all I/O threads."""
         self._stop.set()
         for thread in self.threads:
-            print("Joining: {}".format(thread.name))
             thread.join()
+            logger.debug("Joined thread: {}".format(thread.name))
         self.threads.clear()
         self._close()
 
@@ -220,7 +224,7 @@ class Device():
         return self._connect()
 
     def disconnect(self):
+        return_value = self._disconnect()
         self.connected = False
-        return self._disconnect()
-
+        return return_value
 

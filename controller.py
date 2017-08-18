@@ -32,16 +32,21 @@ Example
 import time
 import socket
 import struct
-import numpy as np
 import telnetlib
+import logging
+import inspect
+import numpy as np
 from .sensor import SENSORS
 from .base import IOBase, Device, on_connection
+from .helper import BraceMessage as __
 
 # TODO check all IO for exceptions that can be raised
 # TODO use frame counter
 # TODO use proper custom exceptions
 # TODO pass exceptions from I/O threads to main thread?
 # TODO refactor errors (less)
+
+logger = logging.getLogger(__name__)
 
 class ControllerError(Exception):
     """Simple exception class used for all errors in this module."""
@@ -89,37 +94,49 @@ class ControlSocket(IOBase):
         try:
             self.socket.open(*self.address, self.timeout)
         except OSError:
-            raise ControllerError("Could not connect to "
-                 "{} on telnet port {}.".format(*self.address))
+            msg = __("Could not connect to {} on telnet port {}.", *self.address)
+            logger.error(msg)
+            raise ControllerError(msg)
+        else:
+            logger.debug(__("Connected to {} on telnet port {}.", *self.address))
         time.sleep(0.1)
         try:
             while self.socket.read_eager():
                 pass
         except EOFError:
-            raise ControllerError("Connection to "
-                "{} closed unexpectedly.".format(self.address[0]))
+            msg = __("Connection to {}:{} closed unexpectedly.", *self.address)
+            logger.error(msg)
+            raise ControllerError(msg)
 
     def _close(self):
         self.socket.close()
+        logger.debug(__("Disconnected from {}:{}.", *self.address))
 
     def _send(self, cmd):
         for seq in "\r\n":
             cmd = cmd.replace(seq, "")
-        cmd = b"$" + cmd.encode('ascii') + b"\r\n"
-        self.socket.write(cmd)
+        cmd = "$" + cmd + "\r\n"
+        logger.debug(__("Sending: {!r}",  cmd))
+        self.socket.write(cmd.encode('ascii'))
 
     def _receive(self):
-        line = self.socket.read_until(b"\n", timeout=self.timeout)
+        line = self.socket.read_until(b"\n", timeout=self.timeout).decode('ascii')
         if line:
-            line = line.decode('ascii').strip("\r\n")
+            logger.debug(__("Received: {!r}", line))
+            line = line.strip("\r\n")
+            #TODO strip error message from line for proper logging entry
             if "$UNKNOWN COMMAND" in line:
-                raise UnknownCommandError()
+                logger.error(line)
+                raise ControllerError(line)
             if "$WRONG PARAMETER" in line:
-                raise WrongParameterError()
+                logger.error(line)
+                raise ControllerError(line)
             if line.endswith("OK"):
                 return line[:-2]
             else:
-                raise ControllerError("Unexpected response: '{}'".format(line))
+                msg = __("Unexpected response: {!r}.", line)
+                logger.error(msg)
+                raise ControllerError(msg)
         else:
             return None
 
@@ -176,12 +193,12 @@ class DataSocket(IOBase):
     preamble          4           ASCII
     item nr.          4           int
     serial nr.        4           int
-    channels          8           bit field; two bits per channel;
+    channels          8           bit field; two bytes per channel;
                                   01: channel present, 00: channel not present;
                                   => n = number of channels
     unused            4
-    number of frames  2           short
     bytes per frame   2           short
+    number of frames  2           short
     frame counter     4           int
     frame 1           n * 4       n * int
     frame 2           n * 4       n * int
@@ -199,15 +216,21 @@ class DataSocket(IOBase):
         try:
             self._socket.connect(self.address)
         except OSError:
-            raise ControllerError("Could not connect to {} on port {}.".format(
-                *self.address))
+            msg = __("Could not connect to {} on data port {}.", *self.address)
+            logger.error(msg)
+            raise ControllerError(msg)
+        else:
+            logger.debug(__("Connected to {} on data port {}.", *self.address))
 
     def _close(self):
         self._socket.close()
+        logger.debug(__("Disconnected from {}:{}.", *self.address))
 
     def _receive(self):
         try:
-            return self._socket.recv(65536)
+            data = self._socket.recv(65536)
+            logger.debug(__("Received: {!r}", data))
+            return data
         except socket.timeout:
             return None
 
@@ -238,8 +261,10 @@ class DataSocket(IOBase):
             if channel not in channels:
                 channels.append(channel)
             else:
-                raise ControllerError("You have specified sensors that are" +
-                    " connected to the same demodulator")
+                msg = "You have specified sensors that are connected to the same demodulator"
+                logger.error(msg)
+                raise ControllerError(msg)
+        logger.debug(__("Getting {} data points from channels {} ...", data_points, channels))
         data_stream = b''
         dtype = np.dtype(np.int32).newbyteorder('<')
         data = np.zeros((data_points, len(channels)), dtype)
@@ -255,8 +280,9 @@ class DataSocket(IOBase):
 #                raise DeviceError("Missed frames!")
             payload_size = bytes_per_frame * nr_of_frames
             if max(channels) + 1 > nr_of_channels:
-                raise ControllerError("Device has only {} channels.".format(
-                    nr_of_channels))
+                msg = __("Device has only {} channels.", nr_of_channels)
+                logger.error(msg)
+                raise ControllerError(msg)
             while len(data_stream) < 32 + payload_size:
                 data_stream += self.in_queue.get()
             payload = data_stream[32:32 + payload_size]
@@ -350,7 +376,7 @@ class Controller(Device):
         response = self.control_socket.command("STI{}".format(sampling_time))
         actual_time = int(response.strip(","))
         if actual_time != sampling_time:
-            print("Set sampling time: {} ms".format(actual_time / 1000))
+            logger.warning(__("Requested sampling time: {} ms; Set sampling time: {} ms", actual_time / 1000))
         return actual_time
 
     @on_connection
