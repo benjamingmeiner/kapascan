@@ -6,6 +6,8 @@ import threading
 import queue
 import logging
 from functools import wraps
+from .helper import BraceMessage as __
+
 
 # TODO add timeouts to signatures.
 
@@ -88,6 +90,39 @@ class IOBase():
         """
         raise NotImplementedError
 
+    def get_answer(self, timeout=None):
+        """
+        Override this method to implement the parsing of incomming data as
+        returned by `_receive`. The default implementation simply returns the
+        latest elements from `in_queue`.
+        """
+        return self._get_item(timeout)
+
+    def _get_item(self, timeout=None):
+        """
+        Gets an element from `in_queue`.
+
+        Parameters
+        ----------
+        timeout : scalar, optional
+            The time in seconds that is waited if no data is immediately
+            available. If `timeout` is not present, the class attibute
+            `timeout` is used.
+
+        Raises
+        ------
+        TimeoutError :
+            if no data is available within `timeout` seconds.
+        """
+        if timeout is None:
+            timeout = self.timeout
+        try:
+            return self.in_queue.get(timeout=timeout)
+        except queue.Empty:
+            raise TimeoutError(
+                "Expected data to be received, but no data sent. " +
+                "I/O threads and device still alive?")
+
     def _output(self):
         """The main ouput thread."""
         while not self._stop.is_set():
@@ -98,6 +133,8 @@ class IOBase():
             self._send(cmd)
         while not self.out_queue.empty():
             self.out_queue.get_nowait()
+            logger.debug(__("Clearing out_queue of {}", self.__class__.__name__))
+        logger.debug(__("{}'s out_queue clear.", self.__class__.__name__))
 
     def _input(self):
         """The main input thread."""
@@ -107,6 +144,8 @@ class IOBase():
                 self.in_queue.put(data)
         while not self.in_queue.empty():
             self.in_queue.get_nowait()
+            logger.debug(__("Clearing in_queue of {}", self.__class__.__name__))
+        logger.debug(__("{}'s in_queue clear.", self.__class__.__name__))
 
     def connect(self):
         """Opens the connection to the device and starts all I/O threads."""
@@ -152,13 +191,11 @@ class IOBase():
         TimeoutError :
             If now response is received within self.timeout seconds.
         """
-        if timeout is None:
-            timeout = self.timeout
         if not self._stop.is_set():
             self.out_queue.put(cmd)
             if get_response:
                 try:
-                    answer = self.in_queue.get(timeout=timeout)
+                    answer = self.get_answer(timeout)
                 except queue.Empty:
                     raise TimeoutError(
                         "No response to command '{}'. ".format(cmd) +

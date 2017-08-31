@@ -230,36 +230,40 @@ class SerialConnection(IOBase):
             raise TableError(msg)
 
     def _receive(self):
-        lines = []
-        while True:
-            line = self.connection.readline().decode('ascii')
-            if line:
-                logger.debug(__("Received: {!r}", line))
-                line = line.strip("\r\n")
-                key, value = self._message_parser(line)
-                lines.append((key, value))
-                logger.debug(__("Parsed message: {} | {}", key, value))
-                if key == 'error':
-                    error = GrblError(value[0])
-                    logger.error(error)
-                    raise GrblError(value[0])
-                if key == 'alarm':
-                    error = GrblAlarm(value[0])
-                    logger.critical(error)
-                    raise error
-                if key in ['ok', 'status']:
-                    break
-            else:
-                return None
-        return lines
+        line = self.connection.readline().decode('ascii')
+        if line:
+            logger.debug(__("Received: {!r}", line))
+            line = line.strip("\r\n")
+            return line
+        else:
+            return None
 
-    def _message_parser(self, msg):
+    def get_answer(self, timeout=None):
+        messages = []
+        while True:
+            line = self._get_item(timeout=timeout)
+            key, value = self._parse(line)
+            messages.append((key, value))
+            logger.debug(__("Parsed message: {} | {}", key, value))
+            if key == 'error':
+                error = GrblError(value[0])
+                logger.error(error)
+                raise GrblError(value[0])
+            if key == 'alarm':
+                error = GrblAlarm(value[0])
+                logger.critical(error)
+                raise error
+            if key in ['ok', 'status']:
+                break
+        return messages
+
+    def _parse(self, line):
         """
-        Parses the received messages.
+        Parses the received line.
 
         Parameters
         ----------
-        msg : str
+        line : str
             The message to be parsed
 
         Returns
@@ -269,8 +273,8 @@ class SerialConnection(IOBase):
             the message and can be one of the following strings:
               'ok', 'error', 'welcome_message', 'alarm', 'setting',
               'startup_lines', 'message', 'startup_execution', 'status', 'empty'
-            The second element of the tuple hold a (possibly empty) list of the
-            according values to the message type.
+            The second element of the tuple holds a (possibly empty) list of
+            the according values to the message type.
 
         Raises
         ------
@@ -279,14 +283,14 @@ class SerialConnection(IOBase):
         """
         message = None
         for key, pattern in self.regex.items():
-            match = pattern.match(msg)
+            match = pattern.match(line)
             if match:
                 groups = match.groups()
                 message = (key, groups)
                 break
         if message is None:
             raise ConnectionError(
-                "Unrecognized response from grbl: {}".format(msg))
+                "Unrecognized response from grbl: {}".format(line))
         return message
 
 
@@ -447,7 +451,6 @@ class Table(Device):
                 raise TableError(msg)
             position = tuple(float(p) for p in position)
         return status, position
-
 
     @on_connection
     def home(self):
