@@ -173,10 +173,30 @@ class Measurement():
         self._table.move(self.settings['extent'][0][0],
                          self.settings['extent'][1][0], mode='absolute')
 
+    def check_movement(self):
+        x, y = self._vectors()
+        corners = [(x[i], y[j]) for i, j in itertools.product((0, -1), repeat=2)]
+        with self._table.check_gcode_mode():
+            try:
+                for x, y in corners:
+                    self._table.move(x, y, 'absolute')
+            except table.GrblAlarm as error:
+                msg = __("Error during dry-run: Motion target (x{}, y{}) " +
+                         "exceeds machine travel x{}, y{}.",
+                         x, y, *self._table.max_travel)
+                error = MeasurementError(msg)
+                logger.warn(error)
+                raise error
+            except table.TableError as error:
+                msg = __("Error during dry-run: {}", str(error))
+                error = MeasurementError(msg)
+                logger.warn(error)
+                raise error
+
     def scan(self):
         """
         Rasters the measuring area. Halts at every measuring position and
-        acquires a certain amount of data points (setting ``data_points``). The
+        acquires a certain amount of data points (setting `data_points`). The
         mean of this data sample is used as the data value at this position.
         Additionally, the temperature is measured at every measuring position.
 
@@ -186,8 +206,13 @@ class Measurement():
             The vectors spanning the measuring area
         z, T : 2D-array
             The acquired data values at the respective coordinates
+        
+        Raises
+        ------
+        MeasurementError :
+            
         """
-        threads = []
+        self.check_movement()
         self._controller.set_sampling_time(self.settings['sampling_time'])
         self._controller.set_trigger_mode('continuous')
 
@@ -198,6 +223,7 @@ class Measurement():
         z = np.zeros((width, length))
         T = np.zeros(length)
         t = np.zeros(length)
+        threads = []
 
         self._table.move(*positions[1][1], mode='absolute')
         logger.info("Started scan.")
@@ -273,7 +299,7 @@ class Measurement():
             elif step >= stop - start:
                 vec = np.array([start, stop], dtype=np.float)
             else:
-                vec = np.arange(start, stop + 0.5 * step, step, dtype=np.float)
+                vec = np.arange(start, stop + step, step, dtype=np.float)
             vec += offset
             vectors.append(vec)
         return vectors
@@ -295,6 +321,9 @@ class Measurement():
         """
         def sort_key(enumerated_pair):
             """ Generates the keys for the sort function. """
+            #TODO: parse the direction specification with a regex and provide
+            # a proper grammar. Also include the other sorting algoriths (like
+            # random and diagonal) 
             _, pair = enumerated_pair
             indices = {'x': 1, 'X': 1, 'y': 0, 'Y': 0}
             coeff = {'-': -1, '+': 1, ' ': 1, 'x': 1, 'X': 1, 'y': 1, 'Y': 1}

@@ -81,11 +81,11 @@ $132=0.000
 import os
 import time
 import csv
-import threading
 import queue
 import re
 import logging
 from functools import wraps
+from contextlib import contextmanager
 import serial
 from .helper import query_yes_no, query_options, cached_property
 from .base import IOBase, Device, on_connection
@@ -351,7 +351,8 @@ class Table(Device):
     @on_connection
     def reset(self):
         """Initiates a soft-reset."""
-        self.serial_connection.command("r")
+        time.sleep(self.serial_connection.timeout)
+        self.serial_connection.command("r", get_response=False)
         self.serial_connection.disconnect()
         self.serial_connection.connect()
 
@@ -487,22 +488,23 @@ class Table(Device):
             raise TableError("Invalid move mode.")
         command = "G1 {} ".format(self.g_code[mode])
         if x is not None:
-            command += "X{} ".format(x) 
+            command += "X{} ".format(x)
         if y is not None:
-            command += "Y{} ".format(y) 
+            command += "Y{} ".format(y)
         if feed == 'max':
             feed = min(self.max_feed)
         command += "F{}".format(feed)
         self.serial_connection.command(command)
         while True:
             status, position = self.get_status()
-            if status.lower() == "idle":
+            if status.lower() == "idle" or status.lower() == "check":
                 break
             else:
                 # TODO: Auto optimize polling frequency based on step length
                 time.sleep(0.014)
         return position
 
+    @on_connection
     def arc_move(self, x, y, r, mode='absolute', feed='max'):
         mode = mode.lower()
         if mode not in self.g_code.keys():
@@ -586,3 +588,14 @@ class Table(Device):
                     logger.error(msg)
                     raise NotOnGridError(msg)
 
+    @contextmanager
+    @on_connection
+    def check_gcode_mode(self):
+        self.serial_connection.command("$C")
+        logger.debug("Enabled g-code-check-mode.")
+        try:
+            yield
+        finally:
+            self.reset()
+            self.serial_connection.command("$X")
+            logger.debug("Disabled g-code-check-mode.")
