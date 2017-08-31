@@ -34,7 +34,7 @@ import socket
 import struct
 import telnetlib
 import logging
-import inspect
+import queue
 import numpy as np
 from .sensor import SENSORS
 from .base import IOBase, Device, on_connection
@@ -124,21 +124,25 @@ class ControlSocket(IOBase):
         if line:
             logger.debug(__("Received: {!r}", line))
             line = line.strip("\r\n")
-            #TODO strip error message from line for proper logging entry
-            if "$UNKNOWN COMMAND" in line:
-                logger.error(line)
-                raise ControllerError(line)
-            if "$WRONG PARAMETER" in line:
-                logger.error(line)
-                raise ControllerError(line)
-            if line.endswith("OK"):
-                return line[:-2]
-            else:
-                msg = __("Unexpected response: {!r}.", line)
-                logger.error(msg)
-                raise ControllerError(msg)
+            return line
         else:
             return None
+
+    def get_answer(self, timeout=None):
+        line = self._get_item(timeout)
+        #TODO strip error message from line for proper logging entry
+        if "$UNKNOWN COMMAND" in line:
+            logger.error(line)
+            raise ControllerError(line)
+        if "$WRONG PARAMETER" in line:
+            logger.error(line)
+            raise ControllerError(line)
+        if line.endswith("OK"):
+            return line[:-2]
+        else:
+            msg = __("Unexpected response: {!r}.", line)
+            logger.error(msg)
+            raise ControllerError(msg)
 
     def command(self, cmd):
         return super().command(cmd, get_response=True)[len(cmd) + 1:]

@@ -22,7 +22,6 @@ import itertools
 from timeit import default_timer as timer
 import time
 import datetime
-import threading
 import logging
 import numpy as np
 from pprint import pformat as pretty
