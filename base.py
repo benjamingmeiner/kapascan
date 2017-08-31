@@ -49,7 +49,7 @@ class IOBase():
     other methods to connect to the device. `do_input` and `do_output` are
     Boolean flags that set if the class is used for input and / or output.
     """
-    def __init__(self, address, timeout=2, do_input=True, do_output=True):
+    def __init__(self, address, timeout=1, do_input=True, do_output=True):
         self.address = address
         self.timeout = timeout
         self.threads = []
