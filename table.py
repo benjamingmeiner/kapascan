@@ -318,6 +318,7 @@ class Table(Device):
     def __init__(self, serial_port, baud_rate=115200):
         super().__init__()
         self.serial_connection = SerialConnection(serial_port, baud_rate)
+        self.settings = None
 
     def _connect(self):
         """Connects to the serial port of the Arduino running grbl."""
@@ -376,51 +377,53 @@ class Table(Device):
             raise UnlockError
 
     @on_connection
-    def _get_property(self, ids):
+    def _get_settings(self):
+        """Queries grbl for its settings values."""
+        logger.debug("Getting grbl settings.")
+        answer = self.serial_connection.command("$$")
+        settings = {}
+        for key, value in answer:
+            if key == 'setting':
+                settings[int(value[0])] = float(value[1])
+        self.settings = settings
+
+    def _get_property(self, *n):
         """
-        Gets grbl '$'-settings.
+        Gets the grbl settings. If the settings are not stored as class
+        attributes yet, they are querried from grbl freshly.
 
         Parameters
         ----------
-        ids : list of int
-            list with the grbl setting IDs to be fetched.
+        n : int or sequence of ints
+            the grbl setting id(s) to be returned
 
         Returns
         -------
-        properties : list of floats
-            list with the corresponding setting values.
+        setting value or list of setting values
         """
-        logger.debug(__("Getting grbl setting ids {}.", ids))
-        answer = self.serial_connection.command("$$")
-        properties = []
-        for id in ids:
-            for key, value in answer:
-                if key == 'setting' and value[0] == str(id):
-                    properties.append(float(value[1]))
-        return properties
+        if self.settings is None:
+            self._get_settings()
+        return [self.settings[i] for i in n]
 
-    @cached_property
-    @on_connection
+    @property
     def resolution(self):
         """Returns (x_res, y_res), the resolution of each axis in steps/mm."""
-        return self._get_property([100, 101])
+        return self._get_property(100, 101)
 
-    @cached_property
-    @on_connection
+    @property
     def max_travel(self):
         """
         Returns (x_max, y_max), the maximal travel distance of each axis in mm.
         """
-        return self._get_property([130, 131])
+        return self._get_property(130, 131)
 
-    @cached_property
-    @on_connection
+    @property
     def max_feed(self):
         """
         Returns (feed_x_max, feed_y_max), the maximal feed of each axis in
         mm/min.
         """
-        return self._get_property([110, 111])
+        return self._get_property(110, 111)
 
     @on_connection
     def get_status(self):

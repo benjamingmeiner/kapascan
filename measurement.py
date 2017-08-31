@@ -121,6 +121,7 @@ class Measurement():
         status = self._table.connect()
         if status.lower() == 'alarm':
             self._table.home()
+        self._table._get_settings()
         self._table.check_resolution(self.settings['extent'])
 
     def disconnect(self, *args):
@@ -181,8 +182,8 @@ class Measurement():
                 for x, y in corners:
                     self._table.move(x, y, 'absolute')
             except table.GrblAlarm as error:
-                msg = __("Error during dry-run: Motion target (x{}, y{}) " +
-                         "exceeds machine travel x{}, y{}.",
+                msg = __("Error during dry-run: Motion target (X {}, Y {}) " +
+                         "exceeds machine travel (X: 0.0 - {}, Y: 0.0 - {}).",
                          x, y, *self._table.max_travel)
                 error = MeasurementError(msg)
                 logger.warn(error)
