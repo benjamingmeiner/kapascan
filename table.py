@@ -425,6 +425,11 @@ class Table(Device):
         """
         return self._get_property(110, 111)
 
+    @property
+    def position(self):
+        """Returns a tuple with the current position. (x,y)"""
+        return self.get_status()[1]
+
     @on_connection
     def get_status(self):
         """
@@ -486,6 +491,7 @@ class Table(Device):
         position : tuple of floats
             The machine position after the movement.
         """
+        previous_position = self.position
         mode = mode.lower()
         if mode not in self.g_code.keys():
             raise TableError("Invalid move mode.")
@@ -505,7 +511,7 @@ class Table(Device):
             else:
                 # TODO: Auto optimize polling frequency based on step length
                 time.sleep(0.014)
-        return position
+        return previous_position
 
     @on_connection
     def arc_move(self, x, y, r, mode='absolute', feed='max'):

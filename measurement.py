@@ -23,6 +23,7 @@ from timeit import default_timer as timer
 import time
 import datetime
 import logging
+import collections
 import numpy as np
 from pprint import pformat as pretty
 from . import controller
@@ -106,7 +107,7 @@ class Measurement():
                                                  host_controller)
         self._table = table.Table(serial_port)
         self._data_logger = data_logger.DataLogger(host_data_logger)
-        self._saved_pos = None
+        self.history = collections.deque([], 100)
 
     def connect(self):
         """
@@ -140,10 +141,11 @@ class Measurement():
 
     __exit__ = disconnect
 
-    @property
-    def position(self):
-        """Returns the current position."""
-        return self._table.get_status()[1]
+    def move(self, *args, history=False, **kwargs):
+        previous_position = self._table.move(*args, **kwargs)
+        if history:
+            self.history.append(previous_position)
+        return previous_position
 
     def interactive_mode(self):
         """Starts the table's interactive mode."""
@@ -158,21 +160,20 @@ class Measurement():
         This function is useful to place the sample on the table without the
         sensor getting in the way.
         """
-        self._saved_pos = self._table.get_status()[1]
         max_distance = (md - 0.1 for md in self._table.max_travel)
-        self._table.move(*max_distance, mode='absolute')
+        self.move(*max_distance, mode='absolute', history=True)
 
     def move_back(self):
         """Moves the table back to the position stored by `move_away()`."""
-        if self._saved_pos is not None:
-            self._table.move(*self._saved_pos, mode='absolute')
-        else:
+        try:
+            self.move(*self.history.pop(), mode='absolute')
+        except IndexError:
             print("No position to move back to.")
 
     def move_to_start(self):
         """Moves the table to the starting position of the measurement."""
-        self._table.move(self.settings['extent'][0][0],
-                         self.settings['extent'][1][0], mode='absolute')
+        self.move(self.settings['extent'][0][0], self.settings['extent'][1][0],
+                  mode='absolute', history=True)
 
     def check_movement(self):
         x, y = self._vectors()
@@ -207,11 +208,11 @@ class Measurement():
             The vectors spanning the measuring area
         z, T : 2D-array
             The acquired data values at the respective coordinates
-        
+
         Raises
         ------
         MeasurementError :
-            
+
         """
         self.check_movement()
         self._controller.set_sampling_time(self.settings['sampling_time'])
@@ -226,7 +227,7 @@ class Measurement():
         t = np.zeros(length)
         threads = []
 
-        self._table.move(*positions[1][1], mode='absolute')
+        self.move(*positions[1][1], mode='absolute', history=True)
         logger.info("Started scan.")
         logger.info(__("Scanning {} positions ...", length))
         for i, (i_pos, position) in _log_progress(list(enumerate(positions))):
@@ -251,6 +252,7 @@ class Measurement():
             for thread in threads:
                 thread.join()
             threads.clear()
+        self.move_back()
 
         z = z.reshape(width, len(x), len(y)).transpose(0, 2, 1)
         T = T.reshape((len(x), len(y))).transpose()
@@ -268,7 +270,7 @@ class Measurement():
         print("Wiping sample ...")
         pos = self.position
         xmax = self._table.max_travel[0]
-        self._table.move(x=xmax)
+        self.move(x=xmax, history=True)
         ywipe = pos[1] - 26
         if ywipe < 0:
             ywipe = 0
@@ -324,7 +326,7 @@ class Measurement():
             """ Generates the keys for the sort function. """
             #TODO: parse the direction specification with a regex and provide
             # a proper grammar. Also include the other sorting algoriths (like
-            # random and diagonal) 
+            # random and diagonal)
             _, pair = enumerated_pair
             indices = {'x': 1, 'X': 1, 'y': 0, 'Y': 0}
             coeff = {'-': -1, '+': 1, ' ': 1, 'x': 1, 'X': 1, 'y': 1, 'Y': 1}
@@ -359,7 +361,7 @@ class Measurement():
 
     def _move_thread(self, x, y):
         """The target function of the thread moving the table."""
-        self._table.move(x, y, 'absolute')
+        self.move(x, y, 'absolute')
 
     def _get_z_thread(self, z, i_pos):
         """The target function of the thread acquiring the z values."""
