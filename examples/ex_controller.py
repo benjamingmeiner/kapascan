@@ -9,7 +9,6 @@ sampling_time = 0.256
 
 c = Controller(sensors, host)
 with c:
-    c.start_acquisition(data_points, mode, sampling_time)
-    data = c.stop_acquisition()
+    data = c.acquire(data_points, mode, sampling_time)
 
 print(data)
