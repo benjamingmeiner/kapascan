@@ -15,6 +15,10 @@ from .helper import BraceMessage as __
 logger = logging.getLogger(__name__)
 
 class ExceptionThread(threading.Thread):
+    """
+    A Thread class that queues Exceptions that are raised during the run of
+    its target function, and reraises them after joining.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.exception_queue = queue.Queue()

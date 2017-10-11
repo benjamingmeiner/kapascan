@@ -1,6 +1,6 @@
 """
 This module provides an easy to use interface for control and data acquisition
-of the DT6220 Controller.
+of the Micro-Epsilon DT6220 controller.
 
 Class listing
 -------------
@@ -43,7 +43,6 @@ from .helper import BraceMessage as __
 # TODO check all IO for exceptions that can be raised
 # TODO use frame counter
 # TODO use proper custom exceptions
-# TODO pass exceptions from I/O threads to main thread?
 # TODO refactor errors (less)
 
 logger = logging.getLogger(__name__)
@@ -62,7 +61,7 @@ class WrongParameterError(ControllerError):
 
 class ControlSocket(IOBase):
     """
-    Interface to the Telnet port of the controller.
+    Interface to the telnet port of the controller.
 
     An overview of all commands that can be sent to the controller can be found
     in chapter 6.4 of the manual.
@@ -182,10 +181,6 @@ class DataSocket(IOBase):
 
     When ``data_port`` is different from the standard port 10001, it can be
     retrieved via the control command "GDP"
-      >>> control_socket = ControlSocket(host)
-      >>> control_socket.connect()
-      >>> data_port = control_socket.command("GDP")
-      >>> control_socket.disconnect()
 
     Data Representation
     -------------------
@@ -265,10 +260,12 @@ class DataSocket(IOBase):
             if channel not in channels:
                 channels.append(channel)
             else:
-                msg = "You have specified sensors that are connected to the same demodulator"
+                msg = "You have specified sensors that are" + \
+                      " connected to the same demodulator."
                 logger.error(msg)
                 raise ControllerError(msg)
-        logger.debug(__("Getting {} data points from channels {} ...", data_points, channels))
+        logger.debug(__("Getting {} data points from channels {} ...",
+                        data_points, channels))
         data_stream = b''
         dtype = np.dtype(np.int32).newbyteorder('<')
         data = np.zeros((data_points, len(channels)), dtype)
@@ -278,10 +275,11 @@ class DataSocket(IOBase):
                 data_stream += self.in_queue.get()
             nr_of_channels, nr_of_frames, bytes_per_frame, frame_counter = \
                 self._parse_header(data_stream)
-#            if received_points != frame_counter - 1:
-#                print(received_points)
-#                print(frame_counter)
-#                raise DeviceError("Missed frames!")
+            # TODO frame counter check
+            # if received_points != frame_counter - 1:
+            #     print(received_points)
+            #     print(frame_counter)
+            #     raise DeviceError("Missed frames!")
             payload_size = bytes_per_frame * nr_of_frames
             if max(channels) + 1 > nr_of_channels:
                 msg = __("Device has only {} channels.", nr_of_channels)
@@ -330,8 +328,9 @@ class Controller(Device):
 
     Parameters
     ----------
-    sensor : str
-        The serial number of the sensor as defined in sensor.py.
+    sensors : list of str
+        The serial numbers of the sensors to be measured with as defined in
+        sensor.py.
     host : str
         The hosts IP address
     control_port : int, optional
@@ -341,11 +340,10 @@ class Controller(Device):
 
     Example
     -------
-      >>> controller = Controller('2011', '192.168.254.173')
-      >>> controller.connect()
-      >>> with controller.acquisition(mode="continuous", sampling_time=50):
-      >>>    controller.get_data(data_points=100, channels=(0,1))
-      >>> controller.disconnect()
+      >>> controller = Controller(['2011'], '192.168.254.173')
+      >>> with controller:
+      >>>    data = controller.get_data(
+      >>>         data_points=100, mode="continuous", sampling_time=50)
     """
 
     def __init__(self, sensors, host, control_port=23, data_port=10001):

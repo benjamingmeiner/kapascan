@@ -7,6 +7,14 @@ https://github.com/gnea/grbl/wiki.
 
 Class listing
 -------------
+TableError :
+    A simple exception class used for all errors in this module.
+GrblError :
+    An exception class mapping the grbl error codes to the corresponding error
+    messages.
+GrblAlarm :
+    An exception class mapping the grbl alarm codes to the corresponding error
+    messages.
 SerialConnection :
     An interface to the serial port of the Arduino running grbl.
 Table :
@@ -14,28 +22,26 @@ Table :
 
 Notes
 -----
-The control of the table is performed via the class methods of ``Table``. The
-class ``SerialConnection`` provides the low-level access to the serial port of
-the Arduino. All end-user functionality of the interface is implemented in class
-``Table``, though.
+The control of the table is performed via the class methods of `Table`. The
+class `SerialConnection` provides the low-level access to the serial port of the Arduino. All end-user functionality of the interface is implemented in class
+`Table`, though.
 
 Example
 -------
   >>> table = Table('COM3')
-  >>> table.connect()
-  >>> table.home()  # starts the homing cycle
-  >>> table.move(x=3, y=4, mode='absolute', feed='max')
-  >>> table.disconnect()
+  >>> with table:
+  >>>     table.home()  # starts the homing cycle
+  >>>     table.move(x=3, y=4, mode='absolute', feed='max')
 
 grbl Settings
 -------------
-There have been made some minor changes to the grbl (compile-time) configuration
-(see file config.h in grbl source code):
+There have been made some minor changes to the grbl firmware (compile-time)
+configuration (see file config.h in grbl source code):
  - The homing cycle routine is adapted to match the setup (no Z-axis)
  - The coordinate system is configured such that, in the top view on the table,
    the origin is at the lower left corner, with x pointing to the right and y
    pointing upwards.
- - The soft-reset character has been changed from ``Ctrl-X`` to ``r``.
+ - The soft-reset character has been changed from `Ctrl-X` to `r`.
 
 This is a listing of the recommended grbl (runtime) settings. See
 https://github.com/gnea/grbl/wiki/Grbl-v1.1-Interface for the complete
@@ -77,17 +83,16 @@ $131=47.000
 $132=0.000
 """
 # TODO check for exceptions that can be raised
+# TODO use latest grbl runtime settings
 
 import os
 import time
 import csv
-import queue
 import re
 import logging
-from functools import wraps
 from contextlib import contextmanager
 import serial
-from .helper import query_yes_no, query_options, cached_property
+from .helper import query_yes_no, query_options
 from .base import IOBase, Device, on_connection
 from .helper import BraceMessage as __
 
@@ -152,21 +157,14 @@ class SerialConnection(IOBase):
     Parameters
     ----------
     serial_port : string
-        The serial port on the host, e.g. 'COM3'.
+        The serial port on the host, e.g. `COM3` on Windows or `/dev/ttyACM0`
+        on Linux.
     baud_rate : int, optional
-        The baud rate of the connection. As of grbl v1.1 this defaults to 115200
+        The baud rate of the connection. As of grbl v1.1 this defaults to 115200.
     timeout : int, optional
         The time in seconds that is waited when receiving input via readline()
         or readlines() methods.
-
-    Example
-    -------
-    serial_connection = SerialConnection('COM3')
-    serial_connection.connect()
-    response = serial_connection.command("?")
-    serial_connection.disconnect()
     """
-
     regex = {'ok': r"ok",
              'error': r"error:(\d+)",
              'welcome_message': r"Grbl (\d+\.\d+[a-z]) \['\$' for help]",
@@ -184,7 +182,7 @@ class SerialConnection(IOBase):
 
     def __init__(self, serial_port, baud_rate=115200):
         super().__init__((serial_port, baud_rate))
-        # TODO: pass all known serial parameters
+        # TODO: pass all known serial parameters for unambiguousness
         self.connection = serial.Serial()
         self.connection.port = self.address[0]
         self.connection.baudrate = self.address[1]
@@ -194,8 +192,8 @@ class SerialConnection(IOBase):
 
     def _open(self):
         """
-        Opens the serial connection and starts the I/O threads.
-        The serial port cannot be used by another application at the same time.
+        Opens the serial connection. The serial port cannot be used by another
+        application at the same time or strange things will happen.
         """
         if not self.threads:
             while True:
@@ -239,6 +237,27 @@ class SerialConnection(IOBase):
             return None
 
     def get_answer(self, timeout=None):
+        """
+        Overridden base method for the immediate parsing of the incoming
+        messages.
+
+        Returns
+        -------
+        messages : list of tuples
+            all consecutive messages (parsed) until the acknowledging 'ok' from
+            grbl.
+
+        Raises
+        ------
+        GrblError :
+            if grbl reports an error
+        GrblAlarm :
+            if grbl reports an alarm.
+
+        See Also
+        --------
+        _parse : The method that parsed the messages.
+        """
         messages = []
         while True:
             line = self._get_item(timeout=timeout)
@@ -298,19 +317,26 @@ class Table(Device):
     """
     Main interface for the usage of the table.
 
+    Parameters
+    ----------
+    serial_port : string
+        The serial port on the host, e.g. `COM3` on Windows or `/dev/ttyACM0`
+        on Linux.
+    baud_rate : int, optional
+        The baud rate of the connection. As of grbl v1.1 this defaults to 115200.
+
     Coordinate system
     -----------------
-    The coordinate system configured such that, in the top view on the table,
+    The coordinate system is configured such that, in the top view on the table,
     the origin is at the lower left corner, with x pointing to the right and y
     pointing upwards.
 
     Example
     -------
       >>> table = Table('COM3')
-      >>> table.connect()
-      >>> table.home()  # starts the homing cycle
-      >>> table.move(x=3, y=4, mode='absolute', feed='max')
-      >>> table.disconnect()
+      >>> with table:
+      >>>     table.home()  # starts the homing cycle
+      >>>     table.move(x=3, y=4, mode='absolute', feed='max')
     """
     g_code = {'relative': 'G91',
               'absolute': 'G90'}
@@ -321,7 +347,6 @@ class Table(Device):
         self.settings = None
 
     def _connect(self):
-        """Connects to the serial port of the Arduino running grbl."""
         self.serial_connection.connect()
         while True:
             try:
@@ -346,7 +371,6 @@ class Table(Device):
                     raise NotConnectedError
 
     def _disconnect(self):
-        """Disconnects from the serial port."""
         self.serial_connection.disconnect()
 
     @on_connection
@@ -472,19 +496,21 @@ class Table(Device):
     @on_connection
     def move(self, x=None, y=None, mode='absolute', feed='max'):
         """
-        Moves the table to the desired coordinates.
+        Moves the table linearly to the desired coordinates.
         Blocks until movement is finished.
 
         Parameters
         ----------
-        x, y : float
-            The coordinates to move to
+        x, y : float, optional
+            The coordinates in mm to move to. If a coordinate is omitted, it is
+            not moved.
 
-        feed : float
-            The feed rate in mm/min
+        mode : str {'relative', 'absolute'}, optional
+            Move in relative or absolute coordinates. Defaults to 'absolute'.
 
-        mode : str {'relative', 'absolute'}
-            Move in relative or absolute coordinates.
+        feed : float, optional
+            The feed rate in mm/min. Defaults to the maximally allowed feed
+            rate.
 
         Returns
         -------
@@ -515,6 +541,30 @@ class Table(Device):
 
     @on_connection
     def arc_move(self, x, y, r, mode='absolute', feed='max'):
+        """
+        Moves the table on an arc to the desired coordinates.
+        Blocks until movement is finished.
+
+        Parameters
+        ----------
+        x, y : float
+            The coordinates in mm to move to.
+
+        r : float
+            The radius of the arc in mm.
+
+        mode : str {'relative', 'absolute'}, optional
+            Move in relative or absolute coordinates. Defaults to 'absolute'.
+
+        feed : float, optional
+            The feed rate in mm/min. Defaults to the maximally allowed feed
+            rate.
+
+        Returns
+        -------
+        position : tuple of floats
+            The machine position after the movement.
+        """
         mode = mode.lower()
         if mode not in self.g_code.keys():
             raise TableError("Invalid move mode.")
@@ -600,6 +650,12 @@ class Table(Device):
     @contextmanager
     @on_connection
     def check_gcode_mode(self):
+        """
+        A context manager that switches grbl to g-code-check-mode.
+
+        In g-code-check-mode grbl parses all input and answers the
+        correspondingly, but it does not move the motors.
+        """
         self.serial_connection.command("$C")
         logger.debug("Enabled g-code-check-mode.")
         try:

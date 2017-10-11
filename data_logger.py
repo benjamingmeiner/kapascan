@@ -1,31 +1,31 @@
 """
 This module provides an easy to use interface for control and data acquisition
-of the DT6220 Controller.
+of the Agilent data logger via its TCP SCPI port.
+So far, only a temperature measurement on one channel is implemented.
 
 Class listing
 -------------
-ControlSocket :
-    An interface to the Telnet port of the controller.
-DataSocket :
-    An interface to the data port of the controller.
-Controller :
-    Main interface for the usage of the controller
+DataLoggerError :
+    A simple exception class used for all errors in this module.
+SCPISocket :
+    An interface to the SCPI port of the data logger.
+DataLogger :
+    Main interface for the usage of the data logger
 
 Notes
 -----
-Data acquisition and control of various parameters of the controller is
-performed via the class methods of ``Controller``. The classes ``ControlSocket``
-and ``DataSocket`` provide the low-level access to the control and data port of
-the device. All end-user functionality of the interface is implemented in class
-``Controller``, though.
+The control of the data logger is performed via the class methods of
+`DataLogger`. The class `SCPISocket` provides the low-level access to the TCP
+SCPI port of the data logger. All end-user functionality of the interface is
+implemented in class `DataLogger`, though.
 
 Example
 -------
-  >>> controller = Controller('2011', '192.168.254.173')
-  >>> controller.connect()
-  >>> with controller.acquisition(mode="continuous", sampling_time=50):
-  >>>    controller.get_data(data_points=100, channels=(0,1))
-  >>> controller.disconnect()
+  >>> data_logger = DataLogger('192.168.254.174')
+  >>> with data_logger:
+  >>>     data_logger.configure(channel=101)
+  >>>     data_logger.display("EXAMPLE")
+  >>>     data = data_logger.get_data()
 """
 
 # TODO: document timeout behaveour.
@@ -35,11 +35,13 @@ import logging
 from .base import IOBase, Device, on_connection
 from .helper import BraceMessage as __
 
+
 logger = logging.getLogger(__name__)
 
 
 class DataLoggerError(Exception):
     """Simple exception class used for all errors in this module."""
+
 
 class SCPISocket(IOBase):
     """
@@ -50,17 +52,10 @@ class SCPISocket(IOBase):
     host : string
         The hosts IP address.
     scpi_port : int, optional
-        The data port of the controller.
+        The SCPI port of the controller. Defaults to 5025.
     timeout : int, optional
         The time in seconds after which the socket stops trying to connect.
-
-    Example
-    -------
-      >>>
-      >>>
-      >>>
     """
-
     def __init__(self, host, scpi_port=5025):
         super().__init__((host, scpi_port))
         self.socket = None
@@ -72,11 +67,11 @@ class SCPISocket(IOBase):
         try:
             self.socket.connect(self.address)
         except OSError:
-            msg = __("Could not connect to {} on scpi port {}.", *self.address)
+            msg = __("Could not connect to {} on SCPI port {}.", *self.address)
             logger.error(msg)
             raise DataLoggerError(msg)
         else:
-            logger.debug(__("Connected to {} on scpi port {}.", *self.address))
+            logger.debug(__("Connected to {} on SCPI port {}.", *self.address))
 
     def _close(self):
         self.socket.close()
@@ -106,9 +101,23 @@ class SCPISocket(IOBase):
 
 class DataLogger(Device):
     """
-    bla
-    """
+    Main interface for the usage of the data logger.
 
+    Parameters
+    ----------
+    host : str
+        The IP address of the data logger.
+    scpi_port : int, optional
+        The SCPI port of the data logger.
+
+    Example
+    -------
+      >>> data_logger = DataLogger('192.168.254.174')
+      >>> with data_logger:
+      >>>     data_logger.configure(channel=101)
+      >>>     data_logger.display("EXAMPLE")
+      >>>     data = data_logger.get_data()
+    """
     def __init__(self, host, scpi_port=5025):
         super().__init__()
         self._scpi_socket = SCPISocket(host, scpi_port)
@@ -122,6 +131,15 @@ class DataLogger(Device):
 
     @on_connection
     def configure(self, channel):
+        """
+        Configures the device to monitor (continuous measurement) the
+        temperature.
+
+        Parameters
+        ----------
+        channel : int
+            The channel number to be monitored.
+        """
         self._scpi_socket.command("*RST", get_response=False)
         self._scpi_socket.command("configure:temperature tc,k,(@{})".format(channel), get_response=False)
         self._scpi_socket.command("route:mon:chan (@{})".format(channel), get_response=False)
@@ -129,13 +147,16 @@ class DataLogger(Device):
 
     @on_connection
     def get_data(self):
+        """Queries and returns the current value of the monitored channel."""
         return self._scpi_socket.command("route:mon:data?")
 
     @on_connection
-    def reset_display(self):
-        self._scpi_socket.command("display:text:clear", get_response=False)
+    def display(self, text):
+        """Displays a custom text on the display."""
+        self._scpi_socket.command("display:text '{}'".format(text), get_response=False)
 
     @on_connection
-    def display(self, text):
-        self._scpi_socket.command("display:text '{}'".format(text), get_response=False)
+    def reset_display(self):
+        """ Resets the display to the default."""
+        self._scpi_socket.command("display:text:clear", get_response=False)
 

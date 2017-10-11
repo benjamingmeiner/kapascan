@@ -8,5 +8,3 @@ with t:
     if t.get_status()[0] == 'Alarm':
         t.home()
     t.move(5, 5, 'absolute')
-
-

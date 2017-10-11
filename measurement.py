@@ -1,5 +1,5 @@
 """
-This module combines the ``controller.py`` and ``table.py`` interfaces to a
+This module combines the `controller.py` and `table.py` interfaces to a
 single interface suited for raster measurements.
 
 Class listing
@@ -55,18 +55,18 @@ class Measurement():
     serial_port : str
         The serial port of the Arduino running grbl.
     settings : dict with keys:
-        ``extent`` : tuple {((x0, x1, delta_x), (y0, y1, delta_y))
+        `extent` : tuple {((x0, x1, delta_x), (y0, y1, delta_y))
             The coordinates of the boundary points of the measuring area
             (x0, x1, y0, y1) and the step size of each axis (delta_x, delta_y)
-        ``sampling_time`` : float, optional
+        `sampling_time` : float, optional
             The desired sampling time in ms. Defaults to 0.256 ms.
-        ``data_points`` : int, optional
+        `data_points` : int, optional
             The number of data points to be acquired at each measurement
             position. Defaults to 100.
-        ``mode`` : str {'absolute', 'relative'}, optional
+        `mode` : str {'absolute', 'relative'}, optional
             Sets the measuring area in relative or absolute coordinates.
             Defaults to 'absolute'.
-        ``direction`` : tuple of str, optional
+        `direction` : tuple of str, optional
             Specifies the order and the direction in which the axes are moved.
             Defaults to ('x', 'y'). The two elements of the tuple set the
             'primary' and 'secondary' axis, where the primary axis is the axis
@@ -75,7 +75,7 @@ class Measurement():
             optionally prefixed with a sign that sets the direction,
             e.g. ('-y', 'x') for a scan in negative y-direction, starting at the
             minimal x value.
-        ``change_direction`` : bool, optional
+        `change_direction` : bool, optional
             Changes the primary scanning direction after each line. Defaults to
             True.
 
@@ -88,6 +88,7 @@ class Measurement():
 
     def __init__(self, host_controller, serial_port, host_data_logger, settings):
         default_settings = {
+            #TODO remove sensors from defaults
             'sensors': ['2011'],
             'data_logger_channel': 101,
             'sampling_time': 0.256,
@@ -310,7 +311,7 @@ class Measurement():
     def _positions(self, x, y):
         """
         Generates a list of all (x, y) positions of the measuring area in the
-        order specified by the settings ``direction`` and ``change_direction``.
+        order specified by the settings `direction` and `change_direction`.
 
         Parameters
         ----------
