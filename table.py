@@ -401,8 +401,11 @@ class Table(Device):
             raise UnlockError
 
     @on_connection
-    def _get_settings(self):
-        """Queries grbl for its settings values."""
+    def _query_settings(self):
+        """
+        Queries grbl for its settings values and stores them in a dict as an
+        attribute.
+        """
         logger.debug("Getting grbl settings.")
         answer = self.serial_connection.command("$$")
         settings = {}
@@ -411,10 +414,11 @@ class Table(Device):
                 settings[int(value[0])] = float(value[1])
         self.settings = settings
 
-    def _get_property(self, *n):
+    def _get_settings(self, *n):
         """
-        Gets the grbl settings. If the settings are not stored as class
-        attributes yet, they are querried from grbl freshly.
+        Returns grbl settings values with the specifies id(s). If the settings
+        are not stored as class attributes yet, they are queried from grbl
+        freshly.
 
         Parameters
         ----------
@@ -423,23 +427,23 @@ class Table(Device):
 
         Returns
         -------
-        setting value or list of setting values
+        list of setting values
         """
         if self.settings is None:
-            self._get_settings()
+            self._query_settings()
         return [self.settings[i] for i in n]
 
     @property
     def resolution(self):
         """Returns (x_res, y_res), the resolution of each axis in steps/mm."""
-        return self._get_property(100, 101)
+        return self._get_settings(100, 101)
 
     @property
     def max_travel(self):
         """
         Returns (x_max, y_max), the maximal travel distance of each axis in mm.
         """
-        return self._get_property(130, 131)
+        return self._get_settings(130, 131)
 
     @property
     def max_feed(self):
@@ -447,7 +451,7 @@ class Table(Device):
         Returns (feed_x_max, feed_y_max), the maximal feed of each axis in
         mm/min.
         """
-        return self._get_property(110, 111)
+        return self._get_settings(110, 111)
 
     @property
     def position(self):
