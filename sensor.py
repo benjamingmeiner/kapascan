@@ -8,8 +8,10 @@ value: dict with
     'name': Name of the sensor
     'channel': channel (demodulator) the sensor is connected to
     'range': Measuring range in µm
-    'diamter': diameter of the sensing electrode in mm
+    'diameter': diameter of the sensing electrode in mm
 """
+
+# TODO update diameters and add edge width
 
 SENSORS = {
     '2011': {'serial_nr': '2011', 'name': 'CS2', 'channel':0, 'range': 2000, 'diameter': 7.9},
