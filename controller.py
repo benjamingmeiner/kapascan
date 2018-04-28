@@ -378,7 +378,7 @@ class Controller(Device):
         response = self.control_socket.command("STI{}".format(sampling_time))
         actual_time = int(response.strip(","))
         if actual_time != sampling_time:
-            logger.warning(__("Requested sampling time: {} ms; Set sampling time: {} ms", actual_time / 1000))
+            logger.warning(__("Requested sampling time: {} ms; Set sampling time: {} ms", actual_time / 1000, sampling_time / 1000))
         return actual_time
 
     @on_connection
